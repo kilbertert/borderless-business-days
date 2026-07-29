@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { comparisonPairs } from "@/lib/pairs";
 
-const baseUrl = "https://kilbertert.github.io/borderless-business-days";
+const baseUrl = "https://borderlessbusinessdays.com";
 
 export const dynamic = "force-static";
 
