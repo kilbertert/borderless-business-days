@@ -3,22 +3,59 @@ import { readFileSync } from "node:fs";
 const DAY_MS = 86_400_000;
 const MAX_RANGE_DAYS = 730;
 
+export class CalendarValidationError extends Error {
+  constructor(message, options) {
+    super(message, options);
+    this.name = "CalendarValidationError";
+  }
+}
+
+function isNormalizedDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 export function loadDataset(datasetPath) {
   const dataset = JSON.parse(readFileSync(datasetPath, "utf8"));
-  if (!Array.isArray(dataset.years) || !Array.isArray(dataset.countries) || !dataset.generatedAt) {
+  const validYears = Array.isArray(dataset.years)
+    && dataset.years.length > 0
+    && dataset.years.every((year, index, years) => Number.isInteger(year) && (index === 0 || year > years[index - 1]));
+  const validCountries = validYears
+    && Array.isArray(dataset.countries)
+    && dataset.countries.every((country) => typeof country?.code === "string"
+      && /^[A-Z]{2}$/.test(country.code)
+      && typeof country.name === "string"
+      && country.name.trim().length > 0
+      && country.holidays
+      && typeof country.holidays === "object"
+      && dataset.years.every((year) => Array.isArray(country.holidays[year])
+        && country.holidays[year].every((holiday) => holiday
+          && typeof holiday.name === "string"
+          && holiday.name.trim().length > 0
+          && isNormalizedDate(holiday.date)
+          && holiday.date.startsWith(`${year}-`)))
+      && Object.entries(country.holidays).every(([year, holidays]) => /^\d{4}$/.test(year)
+        && Array.isArray(holidays)
+        && holidays.every((holiday) => holiday
+          && typeof holiday.name === "string"
+          && holiday.name.trim().length > 0
+          && isNormalizedDate(holiday.date)
+          && holiday.date.startsWith(`${year}-`))));
+  const validCountryCodes = validCountries && new Set(dataset.countries.map((country) => country.code)).size === dataset.countries.length;
+  const validAttribution = dataset.attribution
+    && typeof dataset.attribution.name === "string"
+    && typeof dataset.attribution.url === "string"
+    && typeof dataset.attribution.license === "string";
+  if (!validYears || !validCountries || !validCountryCodes || !validAttribution || typeof dataset.generatedAt !== "string" || !dataset.generatedAt) {
     throw new Error("Holiday dataset is invalid.");
   }
   return dataset;
 }
 
 export function parseDate(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error(`Invalid date: ${value}`);
-  }
+  if (!isNormalizedDate(value)) throw new CalendarValidationError(`Invalid date: ${value}`);
   const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
-    throw new Error(`Invalid date: ${value}`);
-  }
   return date;
 }
 
@@ -36,13 +73,13 @@ export function daysBetween(start, end) {
 
 export function validateCountries(dataset, values) {
   if (!Array.isArray(values) || values.length < 1 || values.length > 8) {
-    throw new Error("Countries must contain between 1 and 8 market codes.");
+    throw new CalendarValidationError("Countries must contain between 1 and 8 market codes.");
   }
   const codes = [...new Set(values.map((value) => String(value).trim().toUpperCase()))];
-  if (codes.length !== values.length) throw new Error("Country codes must be unique.");
+  if (codes.length !== values.length) throw new CalendarValidationError("Country codes must be unique.");
   const known = new Map(dataset.countries.map((country) => [country.code, country]));
   for (const code of codes) {
-    if (!/^[A-Z]{2}$/.test(code) || !known.has(code)) throw new Error(`Unsupported country code: ${code}`);
+    if (!/^[A-Z]{2}$/.test(code) || !known.has(code)) throw new CalendarValidationError(`Unsupported country code: ${code}`);
   }
   return codes;
 }
@@ -52,7 +89,7 @@ export function validateDatasetDate(dataset, value) {
   const minimum = `${dataset.years[0]}-01-01`;
   const maximum = `${dataset.years.at(-1)}-12-31`;
   if (value < minimum || value > maximum) {
-    throw new Error(`Date must be between ${minimum} and ${maximum}.`);
+    throw new CalendarValidationError(`Date must be between ${minimum} and ${maximum}.`);
   }
   return value;
 }
@@ -60,6 +97,35 @@ export function validateDatasetDate(dataset, value) {
 export function countriesForCodes(dataset, countryCodes) {
   const selected = new Set(countryCodes);
   return dataset.countries.filter((country) => selected.has(country.code)).map(({ code, name }) => ({ code, name }));
+}
+
+export function validateRange(dataset, start, end) {
+  validateDatasetDate(dataset, start);
+  validateDatasetDate(dataset, end);
+  const span = daysBetween(start, end);
+  if (span < 0) throw new CalendarValidationError("End date must be on or after the start date.");
+  if (span > MAX_RANGE_DAYS) throw new CalendarValidationError("Date range cannot exceed two years.");
+  return { start, end, span };
+}
+
+export function validateBusinessDayAmount(amount) {
+  if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 500) {
+    throw new CalendarValidationError("Business days must be a non-zero integer between -500 and 500.");
+  }
+  return amount;
+}
+
+export function validateWindowRequest(dataset, start, horizonDays, businessDays) {
+  validateDatasetDate(dataset, start);
+  if (!Number.isInteger(horizonDays) || horizonDays < 7 || horizonDays > 365) {
+    throw new CalendarValidationError("Search horizon must be between 7 and 365 days.");
+  }
+  if (!Number.isInteger(businessDays) || businessDays < 1 || businessDays > 20) {
+    throw new CalendarValidationError("Window length must be between 1 and 20 business days.");
+  }
+  const end = shiftDate(start, horizonDays - 1);
+  validateDatasetDate(dataset, end);
+  return { start, end, horizonDays, businessDays };
 }
 
 export function buildHolidayIndex(dataset, countryCodes) {
@@ -79,11 +145,7 @@ export function buildHolidayIndex(dataset, countryCodes) {
 }
 
 export function analyzeRange(dataset, countryCodes, start, end) {
-  validateDatasetDate(dataset, start);
-  validateDatasetDate(dataset, end);
-  const span = daysBetween(start, end);
-  if (span < 0) throw new Error("End date must be on or after the start date.");
-  if (span > MAX_RANGE_DAYS) throw new Error("Date range cannot exceed two years.");
+  const { span } = validateRange(dataset, start, end);
 
   const holidayIndex = buildHolidayIndex(dataset, countryCodes);
   return Array.from({ length: span + 1 }, (_, index) => {
@@ -110,9 +172,7 @@ export function summarizeDays(days) {
 
 export function addSharedBusinessDays(dataset, countryCodes, start, amount) {
   validateDatasetDate(dataset, start);
-  if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 500) {
-    throw new Error("Business days must be a non-zero integer between -500 and 500.");
-  }
+  validateBusinessDayAmount(amount);
 
   const direction = amount > 0 ? 1 : -1;
   const target = Math.abs(amount);
@@ -126,7 +186,7 @@ export function addSharedBusinessDays(dataset, countryCodes, start, amount) {
     try {
       validateDatasetDate(dataset, cursor);
     } catch (error) {
-      throw new Error("Unable to resolve the requested date.", { cause: error });
+      throw new CalendarValidationError("Unable to resolve the requested date.", { cause: error });
     }
     const weekday = parseDate(cursor).getUTCDay();
     const weekend = weekday === 0 || weekday === 6;
@@ -134,23 +194,14 @@ export function addSharedBusinessDays(dataset, countryCodes, start, amount) {
     const day = { date: cursor, weekday, weekend, conflicts, isSharedBusinessDay: !weekend && conflicts.length === 0 };
     examined.push(day);
     if (day.isSharedBusinessDay) counted += 1;
-    if (examined.length > 1_000) throw new Error("Unable to resolve the requested date.");
+    if (examined.length > 1_000) throw new CalendarValidationError("Unable to resolve the requested date.");
   }
 
   return { result: cursor, examined };
 }
 
 export function findSharedWindows(dataset, countryCodes, start, horizonDays, businessDays) {
-  validateDatasetDate(dataset, start);
-  if (!Number.isInteger(horizonDays) || horizonDays < 7 || horizonDays > 365) {
-    throw new Error("Search horizon must be between 7 and 365 days.");
-  }
-  if (!Number.isInteger(businessDays) || businessDays < 1 || businessDays > 20) {
-    throw new Error("Window length must be between 1 and 20 business days.");
-  }
-
-  const end = shiftDate(start, horizonDays - 1);
-  validateDatasetDate(dataset, end);
+  const { end } = validateWindowRequest(dataset, start, horizonDays, businessDays);
   const days = analyzeRange(dataset, countryCodes, start, end);
   const sharedDays = days.filter((day) => day.isSharedBusinessDay);
   const dayPositions = new Map(days.map((day, index) => [day.date, index]));

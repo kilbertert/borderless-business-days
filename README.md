@@ -2,7 +2,7 @@
 
 Cross-border business day calculator for distributed teams, finance, legal operations, and international delivery planning.
 
-**Live product:** https://kilbertert.github.io/borderless-business-days/
+**Live product:** https://borderlessbusinessdays.com/
 
 The app combines public holiday calendars for up to eight markets and supports three workflows:
 
@@ -33,7 +33,7 @@ pnpm check
 
 ## Static deployment
 
-The project uses Next.js static export. `main` is deployed to GitHub Pages by `.github/workflows/deploy-pages.yml`.
+The project uses Next.js static export. `main` is deployed to GitHub Pages by `.github/workflows/deploy-pages.yml` and published on `borderlessbusinessdays.com`.
 
 ```bash
 pnpm build

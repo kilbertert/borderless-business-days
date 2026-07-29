@@ -13,6 +13,8 @@ The pilot API is a Node.js 24 service that uses the same generated holiday datas
 
 The localhost endpoint must not be advertised to customers. A customer-ready endpoint requires an explicitly approved HTTPS reverse-proxy or tunnel change.
 
+The reserved customer hostname for that ingress is `https://api.borderlessbusinessdays.com`. Do not use a personal blog domain for this service.
+
 ## Authentication
 
 Use either header format:
@@ -77,6 +79,8 @@ Content-Type: application/json
 ```
 
 Successful calculation responses include `X-Quota-Limit`, `X-Quota-Remaining`, and `X-Quota-Expires-At` headers. Invalid, expired, suspended, revoked, exhausted, and rate-limited keys return structured JSON error codes.
+
+A calculation consumes one request after authentication and payload validation succeed, before the deterministic calendar calculation runs. Missing credentials, malformed JSON, unsupported markets, invalid dates, and other rejected inputs do not consume quota. Per-source and per-key minute limits protect the synchronous SQLite service; only minute-limit responses include `Retry-After`.
 
 ## Operator commands
 

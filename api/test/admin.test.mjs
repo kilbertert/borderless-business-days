@@ -18,6 +18,19 @@ function issuedRecord() {
   };
 }
 
+test("shows help without loading runtime configuration", () => {
+  let output = "";
+  runAdmin(["--help"], undefined, {
+    createStore() {
+      throw new Error("store must not be created");
+    },
+    writeOutput(value) {
+      output += value;
+    },
+  });
+  assert.match(output, /API key administration/);
+});
+
 test("revokes a newly issued key when its key file cannot be written", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "bbd-admin-"));
   const statusChanges = [];

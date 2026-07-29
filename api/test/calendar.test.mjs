@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -41,4 +43,28 @@ test("finds uninterrupted shared business-day windows", () => {
 test("rejects invalid markets and normalized calendar dates", () => {
   assert.throws(() => validateCountries(dataset, ["US", "US"]), /unique/);
   assert.throws(() => analyzeRange(dataset, ["US"], "2026-02-30", "2026-03-03"), /Invalid date/);
+});
+
+test("rejects incomplete or malformed holiday datasets", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "bbd-dataset-"));
+  const datasetPath = path.join(directory, "holidays.json");
+  const base = {
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    years: [2026],
+    attribution: { name: "date-holidays", url: "https://example.test", license: "ISC" },
+    countries: [{ code: "US", name: "United States", holidays: { 2026: [] } }],
+  };
+
+  try {
+    for (const invalid of [
+      { ...base, years: [] },
+      { ...base, countries: [{ code: "US", name: "United States", holidays: {} }] },
+      { ...base, countries: [{ code: "US", name: "United States", holidays: { 2026: [{ name: "Bad date", date: "2026-02-30" }] } }] },
+    ]) {
+      writeFileSync(datasetPath, JSON.stringify(invalid), "utf8");
+      assert.throws(() => loadDataset(datasetPath), /Holiday dataset is invalid/);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

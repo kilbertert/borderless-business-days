@@ -5,15 +5,21 @@ import { fileURLToPath } from "node:url";
 import {
   addSharedBusinessDays,
   analyzeRange,
+  CalendarValidationError,
   countriesForCodes,
   findSharedWindows,
   loadDataset,
   summarizeDays,
+  validateBusinessDayAmount,
   validateCountries,
   validateDatasetDate,
+  validateRange,
+  validateWindowRequest,
 } from "./calendar.mjs";
 import { loadConfig } from "./config.mjs";
 import { extractKeyId, KeyAccessError, KeyStore } from "./storage.mjs";
+
+const POST_ROUTES = new Set(["/v1/business-days/analyze", "/v1/business-days/add", "/v1/business-days/windows"]);
 
 class RequestError extends Error {
   constructor(message, code = "invalid_request", statusCode = 400) {
@@ -41,7 +47,8 @@ function jsonResponse(response, statusCode, payload, requestId, extraHeaders = {
 
 async function readJson(request, maximumBodyBytes) {
   const contentType = request.headers["content-type"] ?? "";
-  if (!contentType.toLowerCase().startsWith("application/json")) {
+  const mediaType = String(contentType).split(";", 1)[0].trim().toLowerCase();
+  if (mediaType !== "application/json") {
     throw new RequestError("Content-Type must be application/json.", "unsupported_media_type", 415);
   }
   let size = 0;
@@ -134,27 +141,39 @@ function openApiDocument(config) {
   };
 }
 
-function createRateLimiter(limitPerMinute) {
+function createRateLimiter(limitPerMinute, { code, message }) {
   const buckets = new Map();
-  return (keyId) => {
+  return (identity) => {
     const now = Date.now();
-    const existing = buckets.get(keyId);
-    if (!existing || now - existing.startedAt >= 60_000) {
-      buckets.set(keyId, { startedAt: now, count: 1 });
-      return;
-    }
-    existing.count += 1;
-    if (existing.count > limitPerMinute) {
-      throw new RequestError("Too many requests for this API key. Try again shortly.", "rate_limit_exceeded", 429);
-    }
-    if (buckets.size > 10_000) {
+    if (buckets.size >= 10_000) {
       for (const [id, bucket] of buckets) if (now - bucket.startedAt >= 60_000) buckets.delete(id);
     }
+    const existing = buckets.get(identity);
+    if (!existing || now - existing.startedAt >= 60_000) {
+      if (!existing && buckets.size >= 10_000) throw new RequestError(message, code, 429);
+      buckets.set(identity, { startedAt: now, count: 1 });
+      return;
+    }
+    if (existing.count >= limitPerMinute) throw new RequestError(message, code, 429);
+    existing.count += 1;
   };
 }
 
+function requestSource(request) {
+  const cloudflareAddress = request.headers["cf-connecting-ip"];
+  if (typeof cloudflareAddress === "string" && cloudflareAddress.trim()) return cloudflareAddress.trim();
+  return request.socket.remoteAddress ?? "unknown";
+}
+
 export function createApiServer({ config, dataset, store, logger = console }) {
-  const rateLimit = createRateLimiter(config.rateLimitPerMinute);
+  const preAuthRateLimit = createRateLimiter(config.preAuthRateLimitPerMinute ?? Math.max(120, config.rateLimitPerMinute * 4), {
+    code: "request_rate_limit_exceeded",
+    message: "Too many requests from this client. Try again shortly.",
+  });
+  const rateLimit = createRateLimiter(config.rateLimitPerMinute, {
+    code: "rate_limit_exceeded",
+    message: "Too many requests for this API key. Try again shortly.",
+  });
 
   const server = createServer(async (request, response) => {
     const startedAt = Date.now();
@@ -179,52 +198,66 @@ export function createApiServer({ config, dataset, store, logger = console }) {
         statusCode = 200;
         return jsonResponse(response, statusCode, { data: dataset.countries.map(({ code, name }) => ({ code, name })), meta: { dataset: datasetMeta(dataset) } }, requestId);
       }
+      const accountRoute = request.method === "GET" && pathname === "/v1/account";
+      const calculationRoute = request.method === "POST" && POST_ROUTES.has(pathname);
+      if (!accountRoute && !calculationRoute) throw new RequestError("Route not found.", "not_found", 404);
 
+      preAuthRateLimit(requestSource(request));
       const apiKey = apiKeyFromRequest(request);
       keyId = extractKeyId(apiKey);
       const verified = store.verify(apiKey);
       rateLimit(verified.id);
 
-      if (request.method === "GET" && pathname === "/v1/account") {
+      if (accountRoute) {
         statusCode = 200;
         return jsonResponse(response, statusCode, { data: { customerName: verified.customer_name, customerRef: verified.customer_ref, key: keyMeta(verified) } }, requestId, quotaHeaders(verified));
       }
 
-      if (request.method !== "POST") throw new RequestError("Route not found.", "not_found", 404);
       const body = await readJson(request, config.maximumBodyBytes);
       const countryCodes = validateCountries(dataset, body.countries);
       const markets = countriesForCodes(dataset, countryCodes);
-      let data;
+      let calculate;
 
       if (pathname === "/v1/business-days/analyze") {
         const start = validateDatasetDate(dataset, body.start);
         const end = validateDatasetDate(dataset, body.end);
         const includeDays = normalizeBoolean(body.includeDays, "includeDays");
-        const days = analyzeRange(dataset, countryCodes, start, end);
-        data = { markets, start, end, summary: summarizeDays(days), conflicts: conflictRows(days), ...(includeDays ? { days } : {}) };
+        validateRange(dataset, start, end);
+        calculate = () => {
+          const days = analyzeRange(dataset, countryCodes, start, end);
+          return { markets, start, end, summary: summarizeDays(days), conflicts: conflictRows(days), ...(includeDays ? { days } : {}) };
+        };
       } else if (pathname === "/v1/business-days/add") {
         const start = validateDatasetDate(dataset, body.start);
         const amount = normalizeInteger(body.amount, "amount");
-        const calculation = addSharedBusinessDays(dataset, countryCodes, start, amount);
-        data = { markets, start, amount, result: calculation.result, examinedCalendarDays: calculation.examined.length, conflicts: conflictRows(calculation.examined) };
+        validateBusinessDayAmount(amount);
+        calculate = () => {
+          const calculation = addSharedBusinessDays(dataset, countryCodes, start, amount);
+          return { markets, start, amount, result: calculation.result, examinedCalendarDays: calculation.examined.length, conflicts: conflictRows(calculation.examined) };
+        };
       } else if (pathname === "/v1/business-days/windows") {
         const start = validateDatasetDate(dataset, body.start);
         const horizonDays = normalizeInteger(body.horizonDays, "horizonDays");
         const businessDays = normalizeInteger(body.businessDays, "businessDays");
-        const result = findSharedWindows(dataset, countryCodes, start, horizonDays, businessDays);
-        data = { markets, start, end: result.end, horizonDays, businessDays, windows: result.windows, summary: summarizeDays(result.days) };
-      } else {
-        throw new RequestError("Route not found.", "not_found", 404);
+        validateWindowRequest(dataset, start, horizonDays, businessDays);
+        calculate = () => {
+          const result = findSharedWindows(dataset, countryCodes, start, horizonDays, businessDays);
+          return { markets, start, end: result.end, horizonDays, businessDays, windows: result.windows, summary: summarizeDays(result.days) };
+        };
       }
 
       const consumed = store.consume(apiKey, pathname);
+      const data = calculate();
       statusCode = 200;
       return jsonResponse(response, statusCode, { data, meta: { requestId, key: keyMeta(consumed), dataset: datasetMeta(dataset) } }, requestId, quotaHeaders(consumed));
     } catch (error) {
-      const known = error instanceof RequestError || error instanceof KeyAccessError;
-      statusCode = known ? error.statusCode : 500;
+      const calendarError = error instanceof CalendarValidationError;
+      const known = error instanceof RequestError || error instanceof KeyAccessError || calendarError;
+      statusCode = calendarError ? 400 : known ? error.statusCode : 500;
       if (!known) logger.error({ event: "api_error", requestId, pathname, message: error instanceof Error ? error.message : String(error) });
-      return jsonResponse(response, statusCode, { error: { code: known ? error.code : "internal_error", message: known ? error.message : "The service could not complete the request.", requestId } }, requestId, statusCode === 429 ? { "retry-after": "60" } : {});
+      const code = calendarError ? "invalid_request" : known ? error.code : "internal_error";
+      const retryableRateLimit = code === "rate_limit_exceeded" || code === "request_rate_limit_exceeded";
+      return jsonResponse(response, statusCode, { error: { code, message: known ? error.message : "The service could not complete the request.", requestId } }, requestId, retryableRateLimit ? { "retry-after": "60" } : {});
     } finally {
       logger.info({ event: "api_request", requestId, method: request.method, pathname, statusCode, keyId: keyId ?? null, durationMs: Date.now() - startedAt });
     }

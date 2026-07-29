@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, statSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -36,10 +36,21 @@ export class KeyStore {
   constructor({ databasePath, keyPepper }) {
     this.databasePath = databasePath;
     this.keyPepper = keyPepper;
-    mkdirSync(path.dirname(databasePath), { recursive: true, mode: 0o700 });
-    this.database = new DatabaseSync(databasePath);
-    this.database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
-    this.database.exec(`
+    const databaseDirectory = path.dirname(databasePath);
+    mkdirSync(databaseDirectory, { recursive: true, mode: 0o700 });
+    if ((statSync(databaseDirectory).mode & 0o077) !== 0) {
+      throw new Error(`Database directory must not be accessible by group or other users: ${databaseDirectory}`);
+    }
+    const descriptor = openSync(databasePath, "a", 0o600);
+    closeSync(descriptor);
+    chmodSync(databasePath, 0o600);
+
+    let database;
+    try {
+      database = new DatabaseSync(databasePath);
+      this.database = database;
+      this.database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+      this.database.exec(`
       CREATE TABLE IF NOT EXISTS api_keys (
         id TEXT PRIMARY KEY,
         key_hash TEXT NOT NULL UNIQUE,
@@ -75,8 +86,7 @@ export class KeyStore {
       CREATE INDEX IF NOT EXISTS api_keys_status_expiry ON api_keys(status, expires_at);
       CREATE INDEX IF NOT EXISTS audit_log_key_created ON audit_log(key_id, created_at);
     `);
-    chmodSync(databasePath, 0o600);
-    this.statements = {
+      this.statements = {
       insertKey: this.database.prepare(`
         INSERT INTO api_keys (
           id, key_hash, customer_name, customer_ref, status, created_at, activated_at,
@@ -101,7 +111,18 @@ export class KeyStore {
       updateExpiry: this.database.prepare("UPDATE api_keys SET expires_at = ? WHERE id = ?"),
       insertAudit: this.database.prepare("INSERT INTO audit_log (key_id, event_type, details_json, created_at) VALUES (?, ?, ?, ?)"),
       auditForKey: this.database.prepare("SELECT event_type, details_json, created_at FROM audit_log WHERE key_id = ? ORDER BY created_at DESC"),
-    };
+      };
+      this.secureDatabaseFiles();
+    } catch (error) {
+      database?.close();
+      throw error;
+    }
+  }
+
+  secureDatabaseFiles() {
+    for (const filePath of [this.databasePath, `${this.databasePath}-wal`, `${this.databasePath}-shm`]) {
+      if (existsSync(filePath)) chmodSync(filePath, 0o600);
+    }
   }
 
   hash(apiKey) {
@@ -112,6 +133,22 @@ export class KeyStore {
     const actual = Buffer.from(this.hash(apiKey), "hex");
     const expected = Buffer.from(expectedHex, "hex");
     return actual.length === expected.length && timingSafeEqual(actual, expected);
+  }
+
+  transaction(operation) {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = operation();
+      this.database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        this.database.exec("ROLLBACK");
+      } catch {
+        // Preserve the business operation error.
+      }
+      throw error;
+    }
   }
 
   audit(keyId, eventType, details = {}) {
@@ -127,19 +164,22 @@ export class KeyStore {
     const apiKey = `bbd_live_${id}_${randomBytes(32).toString("base64url")}`;
     const createdAt = nowIso();
     const expiresAt = addDays(createdAt, days);
-    this.statements.insertKey.run(
-      id,
-      this.hash(apiKey),
-      customerName.trim(),
-      customerRef?.trim() || null,
-      createdAt,
-      createdAt,
-      expiresAt,
-      requestLimit,
-      notes?.trim() || null,
-    );
-    this.audit(id, "key_issued", { customerName: customerName.trim(), customerRef, expiresAt, requestLimit });
-    return { apiKey, record: publicKeyRecord(this.statements.keyById.get(id)) };
+    const record = this.transaction(() => {
+      this.statements.insertKey.run(
+        id,
+        this.hash(apiKey),
+        customerName.trim(),
+        customerRef?.trim() || null,
+        createdAt,
+        createdAt,
+        expiresAt,
+        requestLimit,
+        notes?.trim() || null,
+      );
+      this.audit(id, "key_issued", { customerName: customerName.trim(), customerRef, expiresAt, requestLimit });
+      return publicKeyRecord(this.statements.keyById.get(id));
+    });
+    return { apiKey, record };
   }
 
   verify(apiKey) {
@@ -158,8 +198,7 @@ export class KeyStore {
   consume(apiKey, endpoint) {
     const verified = this.verify(apiKey);
     const timestamp = nowIso();
-    this.database.exec("BEGIN IMMEDIATE");
-    try {
+    return this.transaction(() => {
       const result = this.statements.updateUsage.run(timestamp, verified.id, timestamp);
       if (result.changes !== 1) {
         const current = this.statements.keyById.get(verified.id);
@@ -169,12 +208,8 @@ export class KeyStore {
         throw new KeyAccessError("The API key is not currently usable.", "api_key_unavailable", 403);
       }
       this.statements.upsertDaily.run(verified.id, timestamp.slice(0, 10), endpoint);
-      this.database.exec("COMMIT");
       return publicKeyRecord(this.statements.keyById.get(verified.id));
-    } catch (error) {
-      this.database.exec("ROLLBACK");
-      throw error;
-    }
+    });
   }
 
   getKey(id) {
@@ -197,25 +232,30 @@ export class KeyStore {
 
   setStatus(id, status) {
     if (!["active", "suspended", "revoked"].includes(status)) throw new Error(`Unsupported status: ${status}`);
-    const existing = this.getKey(id);
-    if (!existing) throw new Error(`Unknown API key id: ${id}`);
-    if (existing.status === "revoked" && status !== "revoked") throw new Error("A revoked API key cannot be reactivated.");
-    const revokedAt = status === "revoked" ? nowIso() : null;
-    this.statements.updateStatus.run(status, revokedAt, id);
-    this.audit(id, `key_${status}`, { previousStatus: existing.status });
-    return this.getKey(id);
+    return this.transaction(() => {
+      const existing = this.getKey(id);
+      if (!existing) throw new Error(`Unknown API key id: ${id}`);
+      if (existing.status === "revoked" && status !== "revoked") throw new Error("A revoked API key cannot be reactivated.");
+      if (existing.status === status) return existing;
+      const revokedAt = status === "revoked" ? nowIso() : null;
+      this.statements.updateStatus.run(status, revokedAt, id);
+      this.audit(id, `key_${status}`, { previousStatus: existing.status });
+      return this.getKey(id);
+    });
   }
 
   extend(id, days) {
     if (!Number.isInteger(days) || days < 1 || days > 366) throw new Error("Extension days must be between 1 and 366.");
-    const existing = this.getKey(id);
-    if (!existing) throw new Error(`Unknown API key id: ${id}`);
-    if (existing.status === "revoked") throw new Error("A revoked API key cannot be extended.");
-    const base = Math.max(Date.now(), new Date(existing.expires_at).getTime());
-    const expiresAt = new Date(base + days * 86_400_000).toISOString();
-    this.statements.updateExpiry.run(expiresAt, id);
-    this.audit(id, "key_extended", { previousExpiry: existing.expires_at, expiresAt, days });
-    return this.getKey(id);
+    return this.transaction(() => {
+      const existing = this.getKey(id);
+      if (!existing) throw new Error(`Unknown API key id: ${id}`);
+      if (existing.status === "revoked") throw new Error("A revoked API key cannot be extended.");
+      const base = Math.max(Date.now(), new Date(existing.expires_at).getTime());
+      const expiresAt = new Date(base + days * 86_400_000).toISOString();
+      this.statements.updateExpiry.run(expiresAt, id);
+      this.audit(id, "key_extended", { previousExpiry: existing.expires_at, expiresAt, days });
+      return this.getKey(id);
+    });
   }
 
   close() {

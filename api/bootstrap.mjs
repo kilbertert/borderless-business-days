@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, linkSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { projectRoot } from "./config.mjs";
 
 export function bootstrapRuntime({ homeDirectory = homedir() } = {}) {
@@ -23,15 +24,30 @@ export function bootstrapRuntime({ homeDirectory = homedir() } = {}) {
     `BBD_API_DB=${databasePath}`,
     `BBD_API_DATASET=${datasetPath}`,
     `BBD_API_KEY_PEPPER=${randomBytes(48).toString("base64url")}`,
+    "BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE=120",
     "BBD_API_RATE_LIMIT_PER_MINUTE=60",
     "BBD_API_MAX_BODY_BYTES=32768",
     "",
   ].join("\n");
+  const temporaryFile = `${environmentFile}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+  let temporaryCreated = false;
   try {
-    writeFileSync(environmentFile, contents, { encoding: "utf8", mode: 0o600, flag: "wx" });
-    created = true;
-  } catch (error) {
-    if (error?.code !== "EEXIST") throw error;
+    writeFileSync(temporaryFile, contents, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    temporaryCreated = true;
+    try {
+      linkSync(temporaryFile, environmentFile);
+      created = true;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+  } finally {
+    if (temporaryCreated) {
+      try {
+        unlinkSync(temporaryFile);
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
   }
 
   chmodSync(configurationDirectory, 0o700);
@@ -40,7 +56,8 @@ export function bootstrapRuntime({ homeDirectory = homedir() } = {}) {
   return { created, environmentFile, databasePath, configurationDirectory, dataDirectory };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) {
   const result = bootstrapRuntime();
   process.stdout.write(`${JSON.stringify({ status: result.created ? "created" : "existing", environmentFile: result.environmentFile, databasePath: result.databasePath }, null, 2)}\n`);
 }

@@ -43,8 +43,8 @@ Allowance: up to 1,000 API requests
 Renewal: no automatic renewal
 Activation: within two business days after Payoneer confirms cleared payment
 
-Terms: https://kilbertert.github.io/borderless-business-days/terms/
-Refund policy: https://kilbertert.github.io/borderless-business-days/refund/
+Terms: https://borderlessbusinessdays.com/terms/
+Refund policy: https://borderlessbusinessdays.com/refund/
 
 Payoneer payment link:
 [read from the private operator file]

@@ -36,25 +36,32 @@ function parseInteger(value, fallback, { minimum, maximum, name }) {
   return resolved;
 }
 
+function parseNonEmptyString(value, fallback, name) {
+  const resolved = value === undefined ? fallback : value;
+  if (typeof resolved !== "string" || !resolved.trim()) throw new Error(`${name} must be a non-empty string.`);
+  return resolved.trim();
+}
+
 export function loadConfig(overrides = {}) {
   const defaultEnvironmentFile = path.join(homedir(), ".config", "borderless-business-days-api", "config.env");
   const environmentFile = overrides.environmentFile ?? process.env.BBD_API_ENV_FILE ?? defaultEnvironmentFile;
   const fileValues = readEnvironmentFile(environmentFile);
   const values = { ...fileValues, ...process.env, ...overrides };
-  const dataHome = values.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share");
+  const dataHome = parseNonEmptyString(values.XDG_DATA_HOME, path.join(homedir(), ".local", "share"), "XDG_DATA_HOME");
   const keyPepper = values.BBD_API_KEY_PEPPER;
 
-  if (!keyPepper || keyPepper.length < 32) {
+  if (typeof keyPepper !== "string" || keyPepper.length < 32) {
     throw new Error(`BBD_API_KEY_PEPPER must be set to at least 32 characters in ${environmentFile}.`);
   }
 
   return {
     environmentFile,
-    host: values.BBD_API_HOST ?? "127.0.0.1",
+    host: parseNonEmptyString(values.BBD_API_HOST, "127.0.0.1", "BBD_API_HOST"),
     port: parseInteger(values.BBD_API_PORT, 4181, { minimum: 1, maximum: 65_535, name: "BBD_API_PORT" }),
-    databasePath: values.BBD_API_DB ?? path.join(dataHome, "borderless-business-days-api", "api.sqlite3"),
-    datasetPath: values.BBD_API_DATASET ?? path.join(projectRoot, "src", "data", "holidays.json"),
+    databasePath: parseNonEmptyString(values.BBD_API_DB, path.join(dataHome, "borderless-business-days-api", "api.sqlite3"), "BBD_API_DB"),
+    datasetPath: parseNonEmptyString(values.BBD_API_DATASET, path.join(projectRoot, "src", "data", "holidays.json"), "BBD_API_DATASET"),
     keyPepper,
+    preAuthRateLimitPerMinute: parseInteger(values.BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE, 120, { minimum: 1, maximum: 100_000, name: "BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE" }),
     rateLimitPerMinute: parseInteger(values.BBD_API_RATE_LIMIT_PER_MINUTE, 60, { minimum: 1, maximum: 10_000, name: "BBD_API_RATE_LIMIT_PER_MINUTE" }),
     maximumBodyBytes: parseInteger(values.BBD_API_MAX_BODY_BYTES, 32_768, { minimum: 1_024, maximum: 1_048_576, name: "BBD_API_MAX_BODY_BYTES" }),
   };
