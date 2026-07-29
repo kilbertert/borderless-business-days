@@ -51,14 +51,18 @@ function print(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-export function runAdmin(arguments_, config = loadConfig()) {
+function createStore(config) {
+  return new KeyStore(config);
+}
+
+export function runAdmin(arguments_, config = loadConfig(), { createStore: createStore_ = createStore } = {}) {
   const { command, options } = parseArguments(arguments_);
   if (!command || command === "help" || command === "--help") {
     process.stdout.write(`${usage()}\n`);
     return;
   }
 
-  const store = new KeyStore(config);
+  const store = createStore_(config);
   try {
     switch (command) {
       case "init":
@@ -80,8 +84,16 @@ export function runAdmin(arguments_, config = loadConfig()) {
             writeFileSync(keyFile, `${issued.apiKey}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
             chmodSync(keyFile, 0o600);
           } catch (error) {
-            store.setStatus(issued.record.id, "revoked");
-            throw new Error(`The key file could not be written, so the new API key was revoked: ${error instanceof Error ? error.message : String(error)}`);
+            const fileError = error instanceof Error ? error.message : String(error);
+            try {
+              store.setStatus(issued.record.id, "revoked");
+            } catch (rollbackError) {
+              const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+              throw new Error(
+                `The key file could not be written, and automatic revocation failed. Manual intervention is required for API key ${issued.record.id}. File error: ${fileError}. Rollback error: ${rollbackMessage}`,
+              );
+            }
+            throw new Error(`The key file could not be written, so the new API key was revoked: ${fileError}`);
           }
           print({ warning: "The plaintext API key was written once to the private key file.", keyFile, key: issued.record });
         } else {
@@ -105,6 +117,7 @@ export function runAdmin(arguments_, config = loadConfig()) {
         print({ key: store.setStatus(required(options, "id"), "revoked") });
         break;
       case "extend":
+        if (options.days === undefined) throw new Error("--days is required.");
         print({ key: store.extend(required(options, "id"), integerOption(options, "days")) });
         break;
       default:

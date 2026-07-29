@@ -123,7 +123,11 @@ export function addSharedBusinessDays(dataset, countryCodes, start, amount) {
 
   while (counted < target) {
     cursor = shiftDate(cursor, direction);
-    validateDatasetDate(dataset, cursor);
+    try {
+      validateDatasetDate(dataset, cursor);
+    } catch (error) {
+      throw new Error("Unable to resolve the requested date.", { cause: error });
+    }
     const weekday = parseDate(cursor).getUTCDay();
     const weekend = weekday === 0 || weekday === 6;
     const conflicts = holidayIndex.get(cursor) ?? [];
@@ -149,6 +153,7 @@ export function findSharedWindows(dataset, countryCodes, start, horizonDays, bus
   validateDatasetDate(dataset, end);
   const days = analyzeRange(dataset, countryCodes, start, end);
   const sharedDays = days.filter((day) => day.isSharedBusinessDay);
+  const dayPositions = new Map(days.map((day, index) => [day.date, index]));
   const windows = [];
 
   for (let index = 0; index <= sharedDays.length - businessDays; index += 1) {
@@ -156,7 +161,10 @@ export function findSharedWindows(dataset, countryCodes, start, horizonDays, bus
     const first = slice[0];
     const last = slice.at(-1);
     if (!first || !last) continue;
-    const between = days.filter((day) => day.date >= first.date && day.date <= last.date);
+    const firstIndex = dayPositions.get(first.date);
+    const lastIndex = dayPositions.get(last.date);
+    if (firstIndex === undefined || lastIndex === undefined) continue;
+    const between = days.slice(firstIndex, lastIndex + 1);
     if (between.some((day) => !day.weekend && !day.isSharedBusinessDay)) continue;
     windows.push({ start: first.date, end: last.date, businessDays, calendarDays: daysBetween(first.date, last.date) + 1 });
     if (windows.length === 5) break;

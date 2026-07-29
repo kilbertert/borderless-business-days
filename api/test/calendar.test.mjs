@@ -27,6 +27,11 @@ test("adds shared business days after a holiday", () => {
   assert.equal(result.examined.length, 1);
 });
 
+test("reports an unresolved date when an offset leaves the dataset", () => {
+  const maximumYear = dataset.years.at(-1);
+  assert.throws(() => addSharedBusinessDays(dataset, ["US"], `${maximumYear}-12-31`, 1), /Unable to resolve the requested date/);
+});
+
 test("finds uninterrupted shared business-day windows", () => {
   const result = findSharedWindows(dataset, ["US", "GB"], "2026-01-01", 30, 3);
   assert.equal(result.windows.length > 0, true);
