@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { constants, closeSync, existsSync, fchmodSync, mkdirSync, openSync, unlinkSync, writeFileSync } from "node:fs";
+import { constants, closeSync, existsSync, fchmodSync, mkdirSync, openSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
@@ -123,7 +123,13 @@ function writePrivateKeyFile(keyFile, apiKey) {
 }
 
 function writeToStdout(value) {
-  process.stdout.write(value);
+  const buffer = Buffer.from(value, "utf8");
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = writeSync(process.stdout.fd, buffer, offset, buffer.length - offset);
+    if (written <= 0) throw new Error("Standard output closed before the response was written.");
+    offset += written;
+  }
 }
 
 function print(value, writeOutput) {
@@ -165,7 +171,17 @@ export function runAdmin(arguments_, config, { createStore: createStore_ = creat
           if (fileFailure) {
             throw failedDeliveryError(store, issued, "The key file could not be written", fileFailure.error, fileFailure.cleanupErrors);
           }
-          print({ warning: "The plaintext API key was written once to the private key file.", keyFile, key: issued.record }, writeOutput);
+          try {
+            print({ warning: "The plaintext API key was written once to the private key file.", keyFile, key: issued.record }, writeOutput);
+          } catch (outputError) {
+            const cleanupFailures = [];
+            try {
+              unlinkSync(keyFile);
+            } catch (cleanupError) {
+              if (cleanupError?.code !== "ENOENT") cleanupFailures.push(`key file cleanup failed: ${errorMessage(cleanupError)}`);
+            }
+            throw failedDeliveryError(store, issued, "The key file summary could not be written to standard output", outputError, cleanupFailures);
+          }
         } else {
           try {
             print({ warning: "This is the only time the plaintext API key will be displayed.", apiKey: issued.apiKey, key: issued.record }, writeOutput);

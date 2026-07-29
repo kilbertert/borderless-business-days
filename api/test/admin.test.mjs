@@ -159,6 +159,35 @@ test("revokes a newly issued key when plaintext output fails", () => {
   assert.equal(closed, true);
 });
 
+test("removes the key file and revokes the key when summary output fails", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "bbd-admin-summary-"));
+  const keyFile = path.join(directory, "api.key");
+  const statusChanges = [];
+  const store = {
+    issueKey: issuedRecord,
+    setStatus(id, status) {
+      statusChanges.push({ id, status });
+    },
+    close() {},
+  };
+
+  try {
+    assert.throws(
+      () => runAdmin(["issue", "--customer", "Test Company", "--key-file", keyFile], {}, {
+        createStore: () => store,
+        writeOutput() {
+          throw new Error("broken pipe");
+        },
+      }),
+      /summary.*broken pipe.*revoked/i,
+    );
+    assert.deepEqual(statusChanges, [{ id: issuedRecord().record.id, status: "revoked" }]);
+    assert.throws(() => statSync(keyFile), { code: "ENOENT" });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("preserves delivery, rollback, and close failures", () => {
   const store = {
     issueKey: issuedRecord,
