@@ -2,7 +2,7 @@
 
 Cross-border business day calculator for distributed teams, finance, legal operations, and international delivery planning.
 
-**Live product:** https://kilbertert.github.io/borderless-business-days/
+**Live product:** https://borderlessbusinessdays.com/
 
 The app combines public holiday calendars for up to eight markets and supports three workflows:
 
@@ -33,7 +33,7 @@ pnpm check
 
 ## Static deployment
 
-The project uses Next.js static export. `main` is deployed to GitHub Pages by `.github/workflows/deploy-pages.yml`.
+The project uses Next.js static export. `main` is deployed to GitHub Pages by `.github/workflows/deploy-pages.yml` and published on `borderlessbusinessdays.com`.
 
 ```bash
 pnpm build
@@ -58,3 +58,12 @@ The free calculator validates search demand. Paid extensions are intentionally s
 - Slack and email holiday alerts.
 - PDF audit reports.
 - Business-day API access and higher-volume usage.
+
+## API pilot service
+
+The authenticated pilot API runs as a separate localhost-only Node.js service with hashed API keys, SQLite quota accounting, and a local administration CLI. Runtime secrets and customer keys remain outside the repository.
+
+- API behavior and operator commands: [`docs/api-pilot.md`](docs/api-pilot.md)
+- Payment qualification and fulfillment: [`docs/sales-ops.md`](docs/sales-ops.md)
+
+The service is intentionally not exposed through the GitHub Pages site. A public customer endpoint requires a separately approved HTTPS reverse-proxy or tunnel configuration.

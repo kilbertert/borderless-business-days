@@ -11,7 +11,12 @@
     "build:pages": "pnpm generate:data && GITHUB_PAGES=true next build",
     "start": "python3 -m http.server 4178 --bind 0.0.0.0 --directory out",
     "lint": "eslint",
-    "test": "vitest run",
+    "test:web": "vitest run",
+    "test:api": "node --test api/test/*.test.mjs",
+    "test": "pnpm test:web && pnpm test:api",
+    "api:start": "node api/server.mjs",
+    "api:bootstrap": "node api/bootstrap.mjs",
+    "api:admin": "node api/admin.mjs",
     "check": "pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {

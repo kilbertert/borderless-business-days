@@ -43,8 +43,8 @@ Allowance: up to 1,000 API requests
 Renewal: no automatic renewal
 Activation: within two business days after Payoneer confirms cleared payment
 
-Terms: https://kilbertert.github.io/borderless-business-days/terms/
-Refund policy: https://kilbertert.github.io/borderless-business-days/refund/
+Terms: https://borderlessbusinessdays.com/terms/
+Refund policy: https://borderlessbusinessdays.com/refund/
 
 Payoneer payment link:
 [read from the private operator file]
@@ -64,6 +64,16 @@ API key: [send through the agreed private channel]
 
 The pilot does not renew automatically. Please do not place the API key in a public repository or issue.
 ```
+
+## API key operations
+
+The service and operator commands are documented in [`docs/api-pilot.md`](api-pilot.md). Issue a key only after Payoneer shows cleared payment:
+
+```bash
+pnpm api:admin issue --customer "CUSTOMER" --reference "PAYONEER_TRANSACTION_ID" --days 30 --limit 1000
+```
+
+The plaintext key appears once. Send it through the agreed private channel and record only the key ID, activation date, expiry date, and allowance in the sales ledger.
 
 ## Refund handling
 
