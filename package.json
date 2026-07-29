@@ -1,0 +1,34 @@
+{
+  "name": "borderless-business-days",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "generate:data": "node scripts/generate-holidays.mjs",
+    "predev": "pnpm generate:data",
+    "dev": "next dev --hostname 0.0.0.0",
+    "prebuild": "pnpm generate:data",
+    "build": "next build",
+    "build:pages": "pnpm generate:data && GITHUB_PAGES=true next build",
+    "start": "python3 -m http.server 4178 --bind 0.0.0.0 --directory out",
+    "lint": "eslint",
+    "test": "vitest run",
+    "check": "pnpm lint && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "date-holidays": "^3.34.0",
+    "lucide-react": "^1.27.0",
+    "next": "16.2.12",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.12",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
