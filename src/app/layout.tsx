@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const siteUrl = "https://borderlessbusinessdays.com/";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://kilbertert.github.io/borderless-business-days/"),
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Borderless Business Days | Cross-Border Workday Calculator",
     template: "%s | Borderless Business Days",
@@ -12,16 +14,16 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Borderless Business Days",
     description: "Plan launches and deadlines across international public holiday calendars.",
-    url: "https://kilbertert.github.io/borderless-business-days/",
+    url: siteUrl,
     siteName: "Borderless Business Days",
     type: "website",
-    images: ["https://kilbertert.github.io/borderless-business-days/og.png"],
+    images: [new URL("/og.png", siteUrl).toString()],
   },
   twitter: {
     card: "summary_large_image",
     title: "Borderless Business Days",
     description: "Cross-border business day calculator for distributed teams.",
-    images: ["https://kilbertert.github.io/borderless-business-days/og.png"],
+    images: [new URL("/og.png", siteUrl).toString()],
   },
 };
 
