@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -14,6 +14,7 @@ test("issues, meters, suspends, extends, and revokes API keys", () => {
       assert.equal(statSync(directory).mode & 0o777, 0o700);
       assert.equal(statSync(databasePath).mode & 0o777, 0o600);
     }
+    assert.equal(store.database.prepare("PRAGMA journal_mode").get().journal_mode, "delete");
     const issued = store.issueKey({ customerName: "Test Company", customerRef: "test-1", days: 7, requestLimit: 2 });
     assert.match(issued.apiKey, /^bbd_live_[a-f0-9]{32}_[A-Za-z0-9_-]{32,}$/);
     assert.equal(issued.record.request_count, 0);
@@ -45,6 +46,35 @@ test("issues, meters, suspends, extends, and revokes API keys", () => {
     assert.throws(() => store.verify(expired.apiKey), (error) => error instanceof KeyAccessError && error.code === "expired_api_key");
   } finally {
     store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("shares committed key state across long-lived service and short-lived admin connections", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "bbd-key-store-concurrent-"));
+  const databasePath = path.join(directory, "api.sqlite3");
+  const config = { databasePath, keyPepper: "test-pepper-that-is-longer-than-thirty-two-characters" };
+  const serviceStore = new KeyStore(config);
+  let adminStore;
+  let inspectionStore;
+
+  try {
+    adminStore = new KeyStore(config);
+    const issued = adminStore.issueKey({ customerName: "Concurrent Company", days: 7, requestLimit: 2 });
+    adminStore.close();
+    adminStore = undefined;
+
+    assert.equal(serviceStore.verify(issued.apiKey).id, issued.record.id);
+    assert.equal(serviceStore.consume(issued.apiKey, "/v1/test").request_count, 1);
+
+    inspectionStore = new KeyStore(config);
+    assert.equal(inspectionStore.getKey(issued.record.id).request_count, 1);
+    assert.equal(existsSync(`${databasePath}-wal`), false);
+    assert.equal(existsSync(`${databasePath}-shm`), false);
+  } finally {
+    inspectionStore?.close();
+    adminStore?.close();
+    serviceStore.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
