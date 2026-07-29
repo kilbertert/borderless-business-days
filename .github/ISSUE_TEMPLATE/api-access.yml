@@ -1,0 +1,45 @@
+name: API early access
+description: Request early access to the cross-border business-day API.
+title: "API access: "
+labels: ["api-interest"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping shape the paid API. Please do not post credentials, customer data, or private deadlines.
+  - type: dropdown
+    id: use-case
+    attributes:
+      label: Primary use case
+      options:
+        - Deadline and filing calculations
+        - Payments and settlement dates
+        - International delivery estimates
+        - Team planning and launches
+        - Product integration
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: volume
+    attributes:
+      label: Expected monthly calculations
+      options:
+        - Fewer than 1,000
+        - 1,000-10,000
+        - 10,000-100,000
+        - More than 100,000
+    validations:
+      required: true
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Markets and requirements
+      description: Which countries, states, response formats, or audit fields do you need?
+    validations:
+      required: true
+  - type: input
+    id: contact
+    attributes:
+      label: Preferred contact
+      description: Optional GitHub, LinkedIn, or company website. Avoid posting a private email if you do not want it public.

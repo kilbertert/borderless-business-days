@@ -180,7 +180,7 @@ export function Planner() {
         <nav>
           <a href="#method">Method</a>
           <a href="#data">Data</a>
-          <a className="nav-command" href="https://github.com/kilbertert/borderless-business-days/issues/new?title=API%20access%20request" target="_blank" rel="noreferrer">
+          <a className="nav-command" href="https://github.com/kilbertert/borderless-business-days/issues/new?template=api-access.yml" target="_blank" rel="noreferrer">
             <Code2 size={16} aria-hidden="true" /> API access
           </a>
         </nav>
