@@ -2,6 +2,8 @@
 
 Cross-border business day calculator for distributed teams, finance, legal operations, and international delivery planning.
 
+**Live product:** https://kilbertert.github.io/borderless-business-days/
+
 The app combines public holiday calendars for up to eight markets and supports three workflows:
 
 - Count shared business days across a date range.
@@ -45,6 +47,8 @@ Holiday rules come from [date-holidays](https://github.com/commenthol/date-holid
 Calculations assume a Monday-Friday workweek. They are planning estimates, not legal advice; statutory and contractual deadlines should be verified locally.
 
 Application code is MIT licensed.
+
+Product positioning and launch material are documented in [`docs/market-research.md`](docs/market-research.md) and [`docs/launch-kit.md`](docs/launch-kit.md).
 
 ## Commercial path
 

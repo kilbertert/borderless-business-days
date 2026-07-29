@@ -2,8 +2,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import Holidays from "date-holidays";
 
-const now = new Date();
-const firstYear = now.getUTCFullYear() - 1;
+const generatedDay = process.env.HOLIDAY_DATA_DATE ?? new Date().toISOString().slice(0, 10);
+const generatedAt = `${generatedDay}T00:00:00.000Z`;
+const sourceDate = new Date(generatedAt);
+const firstYear = sourceDate.getUTCFullYear() - 1;
 const years = Array.from({ length: 5 }, (_, index) => firstYear + index);
 const outputPath = resolve("src/data/holidays.json");
 const catalog = new Holidays();
@@ -44,7 +46,7 @@ const countries = Object.entries(countryNames)
   });
 
 const dataset = {
-  generatedAt: now.toISOString(),
+  generatedAt,
   years,
   attribution: {
     name: "date-holidays",
