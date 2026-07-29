@@ -7,7 +7,35 @@ import { fileURLToPath } from "node:url";
 import { addSharedBusinessDays, analyzeRange, findSharedWindows, loadDataset, summarizeDays, validateCountries } from "../calendar.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-const dataset = loadDataset(path.resolve(testDirectory, "../../src/data/holidays.json"));
+const productionDatasetPath = path.resolve(testDirectory, "../../src/data/holidays.json");
+const dataset = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  years: [2026],
+  attribution: { name: "test", url: "https://example.test", license: "test" },
+  countries: [
+    {
+      code: "US",
+      name: "United States",
+      holidays: { 2026: [{ name: "New Year", date: "2026-01-01" }] },
+    },
+    {
+      code: "GB",
+      name: "United Kingdom",
+      holidays: {
+        2026: [
+          { name: "New Year", date: "2026-01-01" },
+          { name: "Test Holiday", date: "2026-01-02" },
+        ],
+      },
+    },
+  ],
+};
+
+test("loads the generated production holiday dataset", () => {
+  const productionDataset = loadDataset(productionDatasetPath);
+  assert.equal(productionDataset.countries.length > 0, true);
+  assert.equal(productionDataset.years.length > 0, true);
+});
 
 test("analyzes shared business days and holiday conflicts", () => {
   const countries = validateCountries(dataset, ["us", "GB"]);
@@ -15,9 +43,9 @@ test("analyzes shared business days and holiday conflicts", () => {
   assert.deepEqual(summarizeDays(days), {
     calendarDays: 5,
     weekdays: 3,
-    sharedBusinessDays: 2,
-    blockedWeekdays: 1,
-    availabilityRate: 67,
+    sharedBusinessDays: 1,
+    blockedWeekdays: 2,
+    availabilityRate: 33,
   });
   assert.equal(days[0].conflicts.some((conflict) => conflict.countryCode === "US"), true);
   assert.equal(days[0].conflicts.some((conflict) => conflict.countryCode === "GB"), true);
@@ -36,8 +64,15 @@ test("reports an unresolved date when an offset leaves the dataset", () => {
 
 test("finds uninterrupted shared business-day windows", () => {
   const result = findSharedWindows(dataset, ["US", "GB"], "2026-01-01", 30, 3);
-  assert.equal(result.windows.length > 0, true);
-  assert.equal(result.windows[0].businessDays, 3);
+  assert.equal(result.end, "2026-01-30");
+  assert.deepEqual(result.windows[0], {
+    start: "2026-01-05",
+    end: "2026-01-07",
+    businessDays: 3,
+    calendarDays: 3,
+  });
+  assert.equal(result.windows.length, 5);
+  assert.equal(result.days.at(-1).date, "2026-01-30");
 });
 
 test("rejects invalid markets and normalized calendar dates", () => {
@@ -57,7 +92,11 @@ test("rejects incomplete or malformed holiday datasets", () => {
 
   try {
     for (const invalid of [
+      null,
+      [],
+      "invalid",
       { ...base, years: [] },
+      { ...base, years: [2026, 2028], countries: [{ code: "US", name: "United States", holidays: { 2026: [], 2028: [] } }] },
       { ...base, countries: [{ code: "US", name: "United States", holidays: {} }] },
       { ...base, countries: [{ code: "US", name: "United States", holidays: { 2026: [{ name: "Bad date", date: "2026-02-30" }] } }] },
     ]) {

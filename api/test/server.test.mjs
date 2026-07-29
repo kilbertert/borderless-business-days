@@ -1,17 +1,32 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { loadDataset } from "../calendar.mjs";
 import { createApiServer } from "../server.mjs";
 import { KeyStore } from "../storage.mjs";
 
-const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-const datasetPath = path.resolve(testDirectory, "../../src/data/holidays.json");
 const silentLogger = { info() {}, error() {} };
+const testDataset = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  years: [2026],
+  attribution: { name: "test", url: "https://example.test", license: "test" },
+  countries: [
+    { code: "US", name: "United States", holidays: { 2026: [{ name: "New Year", date: "2026-01-01" }] } },
+    {
+      code: "GB",
+      name: "United Kingdom",
+      holidays: {
+        2026: [
+          { name: "New Year", date: "2026-01-01" },
+          { name: "Test Holiday", date: "2026-01-02" },
+        ],
+      },
+    },
+  ],
+};
 
 async function withServer({ configOverrides = {}, requestLimit = 2 } = {}, callback) {
   const directory = mkdtempSync(path.join(tmpdir(), "bbd-api-server-"));
@@ -19,6 +34,8 @@ async function withServer({ configOverrides = {}, requestLimit = 2 } = {}, callb
   let store;
 
   try {
+    const datasetPath = path.join(directory, "holidays.json");
+    writeFileSync(datasetPath, JSON.stringify(testDataset), "utf8");
     const config = {
       host: "127.0.0.1",
       port: 0,
@@ -47,7 +64,7 @@ async function withServer({ configOverrides = {}, requestLimit = 2 } = {}, callb
 }
 
 test("serves validated calculations and enforces quota semantics", async () => {
-  await withServer({}, async ({ baseUrl, issued, store }) => {
+  await withServer({}, async ({ baseUrl, config, issued, store }) => {
     const headers = { authorization: `Bearer ${issued.apiKey}`, "content-type": "application/json" };
 
     const health = await fetch(`${baseUrl}/healthz`);
@@ -67,6 +84,29 @@ test("serves validated calculations and enforces quota semantics", async () => {
     });
     assert.equal(invalidMediaType.status, 415);
 
+    const emptyBody = await fetch(`${baseUrl}/v1/business-days/analyze`, {
+      method: "POST",
+      headers,
+    });
+    assert.equal(emptyBody.status, 400);
+    assert.equal((await emptyBody.json()).error.code, "invalid_request");
+
+    const malformedJson = await fetch(`${baseUrl}/v1/business-days/analyze`, {
+      method: "POST",
+      headers,
+      body: "{",
+    });
+    assert.equal(malformedJson.status, 400);
+    assert.equal((await malformedJson.json()).error.code, "invalid_json");
+
+    const oversizedBody = await fetch(`${baseUrl}/v1/business-days/analyze`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ padding: "x".repeat(config.maximumBodyBytes) }),
+    });
+    assert.equal(oversizedBody.status, 413);
+    assert.equal((await oversizedBody.json()).error.code, "body_too_large");
+
     const invalidCountry = await fetch(`${baseUrl}/v1/business-days/analyze`, {
       method: "POST",
       headers,
@@ -83,7 +123,7 @@ test("serves validated calculations and enforces quota semantics", async () => {
     });
     assert.equal(analyze.status, 200);
     assert.equal(analyze.headers.get("x-quota-remaining"), "1");
-    assert.equal((await analyze.json()).data.summary.sharedBusinessDays, 2);
+    assert.equal((await analyze.json()).data.summary.sharedBusinessDays, 1);
 
     const account = await fetch(`${baseUrl}/v1/account`, { headers: { authorization: `Bearer ${issued.apiKey}` } });
     assert.equal(account.status, 200);

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { constants, closeSync, existsSync, fchmodSync, mkdirSync, openSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
@@ -21,6 +21,19 @@ Usage:
 The plaintext API key is displayed only by the issue command. Store and send it through a private channel.`;
 }
 
+const COMMAND_OPTIONS = new Map([
+  ["init", new Set()],
+  ["issue", new Set(["customer", "reference", "days", "limit", "notes", "key-file"])],
+  ["list", new Set()],
+  ["show", new Set(["id"])],
+  ["suspend", new Set(["id"])],
+  ["resume", new Set(["id"])],
+  ["revoke", new Set(["id"])],
+  ["extend", new Set(["id", "days"])],
+]);
+
+const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
+
 function parseArguments(values) {
   const [command, ...rest] = values;
   const options = {};
@@ -30,10 +43,19 @@ function parseArguments(values) {
     const name = item.slice(2);
     const value = rest[index + 1];
     if (!value || value.startsWith("--")) throw new Error(`Missing value for --${name}`);
+    if (Object.hasOwn(options, name)) throw new Error(`Duplicate option: --${name}`);
     options[name] = value;
     index += 1;
   }
   return { command, options };
+}
+
+function validateOptions(command, options) {
+  const allowed = COMMAND_OPTIONS.get(command);
+  if (!allowed) throw new Error(`Unknown command: ${command}`);
+  for (const name of Object.keys(options)) {
+    if (!allowed.has(name)) throw new Error(`Unknown option for ${command}: --${name}`);
+  }
 }
 
 function required(options, name) {
@@ -41,11 +63,50 @@ function required(options, name) {
   return options[name];
 }
 
-function integerOption(options, name, fallback) {
+function integerOption(options, name, fallback, { minimum, maximum } = {}) {
   if (options[name] === undefined) return fallback;
   const value = Number(options[name]);
   if (!Number.isInteger(value)) throw new Error(`--${name} must be an integer.`);
+  if ((minimum !== undefined && value < minimum) || (maximum !== undefined && value > maximum)) {
+    throw new Error(`--${name} must be between ${minimum} and ${maximum}.`);
+  }
   return value;
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function writePrivateKeyFile(keyFile, apiKey) {
+  let descriptor;
+  let created = false;
+  try {
+    mkdirSync(path.dirname(keyFile), { recursive: true, mode: 0o700 });
+    descriptor = openSync(keyFile, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | NO_FOLLOW, 0o600);
+    created = true;
+    writeFileSync(descriptor, `${apiKey}\n`, { encoding: "utf8" });
+    fchmodSync(descriptor, 0o600);
+    closeSync(descriptor);
+    descriptor = undefined;
+  } catch (error) {
+    const cleanupErrors = [];
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor);
+      } catch (closeError) {
+        cleanupErrors.push(`close failed: ${errorMessage(closeError)}`);
+      }
+    }
+    if (created) {
+      try {
+        unlinkSync(keyFile);
+      } catch (cleanupError) {
+        if (cleanupError?.code !== "ENOENT") cleanupErrors.push(`file cleanup failed: ${errorMessage(cleanupError)}`);
+      }
+    }
+    return { error, cleanupErrors };
+  }
+  return undefined;
 }
 
 function writeToStdout(value) {
@@ -66,6 +127,7 @@ export function runAdmin(arguments_, config, { createStore: createStore_ = creat
     writeOutput(`${usage()}\n`);
     return;
   }
+  validateOptions(command, options);
 
   const resolvedConfig = config ?? loadConfig();
   const store = createStore_(resolvedConfig);
@@ -80,26 +142,23 @@ export function runAdmin(arguments_, config, { createStore: createStore_ = creat
         const issued = store.issueKey({
           customerName: required(options, "customer"),
           customerRef: options.reference,
-          days: integerOption(options, "days", 30),
-          requestLimit: integerOption(options, "limit", 1_000),
+          days: integerOption(options, "days", 30, { minimum: 1, maximum: 366 }),
+          requestLimit: integerOption(options, "limit", 1_000, { minimum: 1, maximum: 10_000_000 }),
           notes: options.notes,
         });
         if (keyFile) {
-          try {
-            mkdirSync(path.dirname(keyFile), { recursive: true, mode: 0o700 });
-            writeFileSync(keyFile, `${issued.apiKey}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
-            chmodSync(keyFile, 0o600);
-          } catch (error) {
-            const fileError = error instanceof Error ? error.message : String(error);
+          const fileFailure = writePrivateKeyFile(keyFile, issued.apiKey);
+          if (fileFailure) {
+            const failures = [...fileFailure.cleanupErrors];
             try {
               store.setStatus(issued.record.id, "revoked");
             } catch (rollbackError) {
-              const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-              throw new Error(
-                `The key file could not be written, and automatic revocation failed. Manual intervention is required for API key ${issued.record.id}. File error: ${fileError}. Rollback error: ${rollbackMessage}`,
-              );
+              failures.push(`automatic revocation failed: ${errorMessage(rollbackError)}`);
             }
-            throw new Error(`The key file could not be written, so the new API key was revoked: ${fileError}`);
+            const outcome = failures.length === 0
+              ? "The new API key was revoked and no plaintext key file remains."
+              : `Manual intervention is required for API key ${issued.record.id}: ${failures.join("; ")}.`;
+            throw new Error(`The key file could not be written: ${errorMessage(fileFailure.error)}. ${outcome}`);
           }
           print({ warning: "The plaintext API key was written once to the private key file.", keyFile, key: issued.record }, writeOutput);
         } else {
@@ -124,10 +183,8 @@ export function runAdmin(arguments_, config, { createStore: createStore_ = creat
         break;
       case "extend":
         if (options.days === undefined) throw new Error("--days is required.");
-        print({ key: store.extend(required(options, "id"), integerOption(options, "days")) }, writeOutput);
+        print({ key: store.extend(required(options, "id"), integerOption(options, "days", undefined, { minimum: 1, maximum: 366 })) }, writeOutput);
         break;
-      default:
-        throw new Error(`Unknown command: ${command}`);
     }
   } finally {
     store.close();

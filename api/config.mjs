@@ -1,10 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const apiDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const projectRoot = path.resolve(apiDirectory, "..");
+const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
 
 function unquote(value) {
   if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
@@ -14,9 +15,39 @@ function unquote(value) {
 }
 
 export function readEnvironmentFile(filePath) {
-  if (!existsSync(filePath)) return {};
+  let pathMetadata;
+  try {
+    pathMetadata = lstatSync(filePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") return {};
+    throw error;
+  }
+  if (pathMetadata.isSymbolicLink() || !pathMetadata.isFile()) {
+    throw new Error(`Environment file must be a regular file: ${filePath}`);
+  }
+  if (typeof process.getuid === "function" && pathMetadata.uid !== process.getuid()) {
+    throw new Error(`Environment file must be owned by the current user: ${filePath}`);
+  }
+  if (process.platform !== "win32" && (pathMetadata.mode & 0o177) !== 0) {
+    throw new Error(`Environment file permissions must not exceed 0600: ${filePath}`);
+  }
+
+  const descriptor = openSync(filePath, constants.O_RDONLY | NO_FOLLOW);
+  let contents;
+  try {
+    const descriptorMetadata = fstatSync(descriptor);
+    if (!descriptorMetadata.isFile()
+      || descriptorMetadata.dev !== pathMetadata.dev
+      || descriptorMetadata.ino !== pathMetadata.ino) {
+      throw new Error(`Environment file changed during validation: ${filePath}`);
+    }
+    contents = readFileSync(descriptor, "utf8");
+  } finally {
+    closeSync(descriptor);
+  }
+
   const values = {};
-  for (const rawLine of readFileSync(filePath, "utf8").split(/\r?\n/)) {
+  for (const rawLine of contents.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
     const separator = line.indexOf("=");
@@ -42,12 +73,21 @@ function parseNonEmptyString(value, fallback, name) {
   return resolved.trim();
 }
 
+function parseAbsolutePath(value, fallback, name) {
+  const candidate = value === undefined ? fallback : value;
+  if (typeof candidate !== "string" || !candidate.trim()) throw new Error(`${name} must be a non-empty string.`);
+  if (candidate !== candidate.trim() || !path.isAbsolute(candidate)) {
+    throw new Error(`${name} must be an absolute path without leading or trailing whitespace.`);
+  }
+  return path.normalize(candidate);
+}
+
 export function loadConfig(overrides = {}) {
   const defaultEnvironmentFile = path.join(homedir(), ".config", "borderless-business-days-api", "config.env");
-  const environmentFile = overrides.environmentFile ?? process.env.BBD_API_ENV_FILE ?? defaultEnvironmentFile;
+  const environmentFile = parseAbsolutePath(overrides.environmentFile ?? process.env.BBD_API_ENV_FILE, defaultEnvironmentFile, "BBD_API_ENV_FILE");
   const fileValues = readEnvironmentFile(environmentFile);
   const values = { ...fileValues, ...process.env, ...overrides };
-  const dataHome = parseNonEmptyString(values.XDG_DATA_HOME, path.join(homedir(), ".local", "share"), "XDG_DATA_HOME");
+  const dataHome = parseAbsolutePath(values.XDG_DATA_HOME, path.join(homedir(), ".local", "share"), "XDG_DATA_HOME");
   const keyPepper = values.BBD_API_KEY_PEPPER;
 
   if (typeof keyPepper !== "string" || keyPepper.length < 32) {
@@ -58,8 +98,8 @@ export function loadConfig(overrides = {}) {
     environmentFile,
     host: parseNonEmptyString(values.BBD_API_HOST, "127.0.0.1", "BBD_API_HOST"),
     port: parseInteger(values.BBD_API_PORT, 4181, { minimum: 1, maximum: 65_535, name: "BBD_API_PORT" }),
-    databasePath: parseNonEmptyString(values.BBD_API_DB, path.join(dataHome, "borderless-business-days-api", "api.sqlite3"), "BBD_API_DB"),
-    datasetPath: parseNonEmptyString(values.BBD_API_DATASET, path.join(projectRoot, "src", "data", "holidays.json"), "BBD_API_DATASET"),
+    databasePath: parseAbsolutePath(values.BBD_API_DB, path.join(dataHome, "borderless-business-days-api", "api.sqlite3"), "BBD_API_DB"),
+    datasetPath: parseAbsolutePath(values.BBD_API_DATASET, path.join(projectRoot, "src", "data", "holidays.json"), "BBD_API_DATASET"),
     keyPepper,
     preAuthRateLimitPerMinute: parseInteger(values.BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE, 120, { minimum: 1, maximum: 100_000, name: "BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE" }),
     rateLimitPerMinute: parseInteger(values.BBD_API_RATE_LIMIT_PER_MINUTE, 60, { minimum: 1, maximum: 10_000, name: "BBD_API_RATE_LIMIT_PER_MINUTE" }),

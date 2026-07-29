@@ -18,11 +18,15 @@ function isNormalizedDate(value) {
 
 export function loadDataset(datasetPath) {
   const dataset = JSON.parse(readFileSync(datasetPath, "utf8"));
+  if (!dataset || Array.isArray(dataset) || typeof dataset !== "object") {
+    throw new Error("Holiday dataset is invalid.");
+  }
   const validYears = Array.isArray(dataset.years)
     && dataset.years.length > 0
-    && dataset.years.every((year, index, years) => Number.isInteger(year) && (index === 0 || year > years[index - 1]));
+    && dataset.years.every((year, index, years) => Number.isInteger(year) && (index === 0 || year === years[index - 1] + 1));
   const validCountries = validYears
     && Array.isArray(dataset.countries)
+    && dataset.countries.length > 0
     && dataset.countries.every((country) => typeof country?.code === "string"
       && /^[A-Z]{2}$/.test(country.code)
       && typeof country.name === "string"

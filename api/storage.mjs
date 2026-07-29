@@ -1,7 +1,67 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, statSync } from "node:fs";
+import { closeSync, constants, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+
+const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
+
+function currentUserOwns(metadata) {
+  return typeof process.getuid !== "function" || metadata.uid === process.getuid();
+}
+
+function assertPrivateDirectory(directoryPath) {
+  const metadata = lstatSync(directoryPath);
+  if (metadata.isSymbolicLink() || !metadata.isDirectory() || !currentUserOwns(metadata)) {
+    throw new Error(`Database directory must be a real directory owned by the current user: ${directoryPath}`);
+  }
+  if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) {
+    throw new Error(`Database directory must not be accessible by group or other users: ${directoryPath}`);
+  }
+}
+
+function securePrivateFile(filePath, { allowMissing = false, repairPermissions = false } = {}) {
+  let pathMetadata;
+  try {
+    pathMetadata = lstatSync(filePath);
+  } catch (error) {
+    if (allowMissing && error?.code === "ENOENT") return false;
+    throw error;
+  }
+  if (pathMetadata.isSymbolicLink() || !pathMetadata.isFile() || !currentUserOwns(pathMetadata)) {
+    throw new Error(`Database path must be a regular file owned by the current user: ${filePath}`);
+  }
+  if (!repairPermissions && process.platform !== "win32" && (pathMetadata.mode & 0o177) !== 0) {
+    throw new Error(`Database file permissions must not exceed 0600: ${filePath}`);
+  }
+
+  const descriptor = openSync(filePath, constants.O_RDONLY | NO_FOLLOW);
+  try {
+    const descriptorMetadata = fstatSync(descriptor);
+    if (!descriptorMetadata.isFile()
+      || !currentUserOwns(descriptorMetadata)
+      || descriptorMetadata.dev !== pathMetadata.dev
+      || descriptorMetadata.ino !== pathMetadata.ino) {
+      throw new Error(`Database path changed during validation: ${filePath}`);
+    }
+    fchmodSync(descriptor, 0o600);
+  } finally {
+    closeSync(descriptor);
+  }
+  return true;
+}
+
+function createPrivateDatabaseFile(databasePath) {
+  const descriptor = openSync(
+    databasePath,
+    constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | NO_FOLLOW,
+    0o600,
+  );
+  try {
+    fchmodSync(descriptor, 0o600);
+  } finally {
+    closeSync(descriptor);
+  }
+}
 
 export class KeyAccessError extends Error {
   constructor(message, code, statusCode) {
@@ -28,22 +88,24 @@ function publicKeyRecord(row) {
 }
 
 export function extractKeyId(apiKey) {
-  const match = /^bbd_live_([a-f0-9]{12})_([A-Za-z0-9_-]{32,})$/.exec(apiKey ?? "");
+  const match = /^bbd_live_([a-f0-9]{12}|[a-f0-9]{32})_([A-Za-z0-9_-]{32,})$/.exec(apiKey ?? "");
   return match?.[1];
 }
 
 export class KeyStore {
   constructor({ databasePath, keyPepper }) {
+    if (!path.isAbsolute(databasePath)) throw new Error("Database path must be absolute.");
     this.databasePath = databasePath;
     this.keyPepper = keyPepper;
     const databaseDirectory = path.dirname(databasePath);
     mkdirSync(databaseDirectory, { recursive: true, mode: 0o700 });
-    if ((statSync(databaseDirectory).mode & 0o077) !== 0) {
-      throw new Error(`Database directory must not be accessible by group or other users: ${databaseDirectory}`);
+    assertPrivateDirectory(databaseDirectory);
+    if (!securePrivateFile(databasePath, { allowMissing: true })) {
+      createPrivateDatabaseFile(databasePath);
+      securePrivateFile(databasePath);
     }
-    const descriptor = openSync(databasePath, "a", 0o600);
-    closeSync(descriptor);
-    chmodSync(databasePath, 0o600);
+    securePrivateFile(`${databasePath}-wal`, { allowMissing: true });
+    securePrivateFile(`${databasePath}-shm`, { allowMissing: true });
 
     let database;
     try {
@@ -121,7 +183,7 @@ export class KeyStore {
 
   secureDatabaseFiles() {
     for (const filePath of [this.databasePath, `${this.databasePath}-wal`, `${this.databasePath}-shm`]) {
-      if (existsSync(filePath)) chmodSync(filePath, 0o600);
+      securePrivateFile(filePath, { allowMissing: filePath !== this.databasePath, repairPermissions: true });
     }
   }
 
@@ -139,6 +201,7 @@ export class KeyStore {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const result = operation();
+      this.secureDatabaseFiles();
       this.database.exec("COMMIT");
       return result;
     } catch (error) {
@@ -160,7 +223,7 @@ export class KeyStore {
     if (!Number.isInteger(days) || days < 1 || days > 366) throw new Error("Days must be between 1 and 366.");
     if (!Number.isInteger(requestLimit) || requestLimit < 1 || requestLimit > 10_000_000) throw new Error("Request limit must be between 1 and 10,000,000.");
 
-    const id = randomBytes(6).toString("hex");
+    const id = randomBytes(16).toString("hex");
     const apiKey = `bbd_live_${id}_${randomBytes(32).toString("base64url")}`;
     const createdAt = nowIso();
     const expiresAt = addDays(createdAt, days);
@@ -202,7 +265,11 @@ export class KeyStore {
       const result = this.statements.updateUsage.run(timestamp, verified.id, timestamp);
       if (result.changes !== 1) {
         const current = this.statements.keyById.get(verified.id);
-        if (current?.request_count >= current?.request_limit) {
+        if (!current) throw new KeyAccessError("The API key is invalid.", "invalid_api_key", 401);
+        if (current.status === "revoked") throw new KeyAccessError("The API key has been revoked.", "revoked_api_key", 403);
+        if (current.status === "suspended") throw new KeyAccessError("The API key is suspended.", "suspended_api_key", 403);
+        if (current.expires_at <= timestamp) throw new KeyAccessError("The API key has expired.", "expired_api_key", 403);
+        if (current.request_count >= current.request_limit) {
           throw new KeyAccessError("The API key request allowance is exhausted.", "quota_exhausted", 429);
         }
         throw new KeyAccessError("The API key is not currently usable.", "api_key_unavailable", 403);

@@ -1,21 +1,76 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
-import { chmodSync, linkSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  constants,
+  fchmodSync,
+  fstatSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { projectRoot } from "./config.mjs";
 
+const NO_FOLLOW = constants.O_NOFOLLOW ?? 0;
+
+function currentUserOwns(metadata) {
+  return typeof process.getuid !== "function" || metadata.uid === process.getuid();
+}
+
+function ensurePrivateDirectory(directoryPath) {
+  mkdirSync(directoryPath, { recursive: true, mode: 0o700 });
+  const metadata = lstatSync(directoryPath);
+  if (metadata.isSymbolicLink() || !metadata.isDirectory() || !currentUserOwns(metadata)) {
+    throw new Error(`Runtime directory must be a real directory owned by the current user: ${directoryPath}`);
+  }
+  chmodSync(directoryPath, 0o700);
+}
+
+function environmentPath(value, name) {
+  if (typeof value !== "string" || value.trim() !== value || /[\r\n]/.test(value) || !path.isAbsolute(value)) {
+    throw new Error(`${name} must be an absolute path without CR, LF, or leading/trailing whitespace.`);
+  }
+  return value;
+}
+
+function secureEnvironmentFile(filePath) {
+  const pathMetadata = lstatSync(filePath);
+  if (pathMetadata.isSymbolicLink() || !pathMetadata.isFile() || !currentUserOwns(pathMetadata)) {
+    throw new Error(`Runtime environment file must be a regular file owned by the current user: ${filePath}`);
+  }
+
+  const descriptor = openSync(filePath, constants.O_RDONLY | NO_FOLLOW);
+  try {
+    const descriptorMetadata = fstatSync(descriptor);
+    if (!descriptorMetadata.isFile()
+      || !currentUserOwns(descriptorMetadata)
+      || descriptorMetadata.dev !== pathMetadata.dev
+      || descriptorMetadata.ino !== pathMetadata.ino) {
+      throw new Error(`Runtime environment file changed during validation: ${filePath}`);
+    }
+    fchmodSync(descriptor, 0o600);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 export function bootstrapRuntime({ homeDirectory = homedir() } = {}) {
-  process.umask(0o077);
+  environmentPath(homeDirectory, "Home directory");
   const configurationDirectory = path.join(homeDirectory, ".config", "borderless-business-days-api");
   const dataDirectory = path.join(homeDirectory, ".local", "share", "borderless-business-days-api");
   const environmentFile = path.join(configurationDirectory, "config.env");
-  const databasePath = path.join(dataDirectory, "api.sqlite3");
-  const datasetPath = path.join(projectRoot, "src", "data", "holidays.json");
+  const databasePath = environmentPath(path.join(dataDirectory, "api.sqlite3"), "Database path");
+  const datasetPath = environmentPath(path.join(projectRoot, "src", "data", "holidays.json"), "Dataset path");
 
-  mkdirSync(configurationDirectory, { recursive: true, mode: 0o700 });
-  mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
+  ensurePrivateDirectory(configurationDirectory);
+  ensurePrivateDirectory(dataDirectory);
 
   let created = false;
   const contents = [
@@ -31,6 +86,7 @@ export function bootstrapRuntime({ homeDirectory = homedir() } = {}) {
   ].join("\n");
   const temporaryFile = `${environmentFile}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
   let temporaryCreated = false;
+  let primaryError;
   try {
     writeFileSync(temporaryFile, contents, { encoding: "utf8", mode: 0o600, flag: "wx" });
     temporaryCreated = true;
@@ -40,24 +96,33 @@ export function bootstrapRuntime({ homeDirectory = homedir() } = {}) {
     } catch (error) {
       if (error?.code !== "EEXIST") throw error;
     }
+  } catch (error) {
+    primaryError = error;
+    throw error;
   } finally {
     if (temporaryCreated) {
       try {
         unlinkSync(temporaryFile);
-      } catch (error) {
-        if (error?.code !== "ENOENT") throw error;
+      } catch (cleanupError) {
+        if (cleanupError?.code !== "ENOENT") {
+          if (primaryError) {
+            throw new AggregateError([primaryError, cleanupError], "Runtime bootstrap failed and its temporary file could not be removed.", { cause: primaryError });
+          }
+          throw cleanupError;
+        }
       }
     }
   }
 
-  chmodSync(configurationDirectory, 0o700);
-  chmodSync(dataDirectory, 0o700);
-  chmodSync(environmentFile, 0o600);
+  ensurePrivateDirectory(configurationDirectory);
+  ensurePrivateDirectory(dataDirectory);
+  secureEnvironmentFile(environmentFile);
   return { created, environmentFile, databasePath, configurationDirectory, dataDirectory };
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMain) {
+  process.umask(0o077);
   const result = bootstrapRuntime();
   process.stdout.write(`${JSON.stringify({ status: result.created ? "created" : "existing", environmentFile: result.environmentFile, databasePath: result.databasePath }, null, 2)}\n`);
 }
