@@ -65,6 +65,16 @@ API key: [send through the agreed private channel]
 The pilot does not renew automatically. Please do not place the API key in a public repository or issue.
 ```
 
+## API key operations
+
+The service and operator commands are documented in [`docs/api-pilot.md`](api-pilot.md). Issue a key only after Payoneer shows cleared payment:
+
+```bash
+pnpm api:admin issue --customer "CUSTOMER" --reference "PAYONEER_TRANSACTION_ID" --days 30 --limit 1000
+```
+
+The plaintext key appears once. Send it through the agreed private channel and record only the key ID, activation date, expiry date, and allowance in the sales ledger.
+
 ## Refund handling
 
 Record every request and outcome in the private ledger. Verify the original transaction and customer identity before returning funds. Apply the published refund policy and retain the Payoneer refund reference or other compliant transfer reference.
