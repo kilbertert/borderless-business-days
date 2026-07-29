@@ -1,12 +1,37 @@
-name: API early access
-description: Request early access to the cross-border business-day API.
-title: "API access: "
+name: Founding API Pilot application
+description: Apply for the prepaid 30-day B2B API pilot. Payment is requested only after approval.
+title: "Founding API Pilot: "
 labels: ["api-interest"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping shape the paid API. Please do not post credentials, customer data, or private deadlines.
+        The Founding API Pilot is a manually approved B2B service: 50 USD for 30 days and up to 1,000 API requests. No payment is requested with this application.
+
+        This issue is public. Do not post private email addresses, credentials, payment information, customer data, or confidential deadlines.
+  - type: checkboxes
+    id: eligibility
+    attributes:
+      label: Business eligibility
+      options:
+        - label: I am applying for a business or professional use case, not a personal consumer purchase.
+          required: true
+        - label: I understand that scope and activation timing must be confirmed before any Payoneer payment link is sent.
+          required: true
+  - type: input
+    id: company
+    attributes:
+      label: Business or product name
+      description: The organization, professional practice, or product that would use the API.
+    validations:
+      required: true
+  - type: input
+    id: website
+    attributes:
+      label: Public business website or profile
+      description: Provide a public URL that shows the business or professional activity. Do not post a private email address.
+    validations:
+      required: true
   - type: dropdown
     id: use-case
     attributes:
@@ -41,5 +66,12 @@ body:
   - type: input
     id: contact
     attributes:
-      label: Preferred contact
-      description: Optional GitHub, LinkedIn, or company website. Avoid posting a private email if you do not want it public.
+      label: Public contact route
+      description: Optional company contact page, GitHub profile, or LinkedIn profile that can be used to establish a private conversation after qualification.
+  - type: checkboxes
+    id: commercial-terms
+    attributes:
+      label: Pilot terms
+      options:
+        - label: I understand the pilot is a one-time 50 USD payment, lasts 30 days from activation, and does not renew automatically.
+          required: true

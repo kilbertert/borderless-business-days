@@ -180,9 +180,9 @@ export function Planner() {
         <nav>
           <a href="#method">Method</a>
           <a href="#data">Data</a>
-          <a className="nav-command" href="https://github.com/kilbertert/borderless-business-days/issues/new?template=api-access.yml" target="_blank" rel="noreferrer">
-            <Code2 size={16} aria-hidden="true" /> API access
-          </a>
+          <Link className="nav-command" href="/pilot/">
+            <Code2 size={16} aria-hidden="true" /> API pilot
+          </Link>
         </nav>
       </header>
 
@@ -364,6 +364,29 @@ export function Planner() {
           </div>
         </section>
 
+        <section className="pilot-band" id="api-pilot">
+          <div className="pilot-copy">
+            <p className="eyebrow">Applications open · B2B only</p>
+            <h2>Founding API Pilot</h2>
+            <p>
+              A prepaid 30-day pilot for teams that need cross-border business-day calculations inside their own workflow.
+              We confirm the use case and activation date before sending a Payoneer payment link.
+            </p>
+            <div className="pilot-inclusions" aria-label="Pilot inclusions">
+              <span><Check size={15} aria-hidden="true" /> Up to 1,000 API requests</span>
+              <span><Check size={15} aria-hidden="true" /> Email onboarding</span>
+              <span><Check size={15} aria-hidden="true" /> No automatic renewal</span>
+            </div>
+          </div>
+          <div className="pilot-offer">
+            <span>One-time pilot</span>
+            <strong><small>$</small>50 <small>USD</small></strong>
+            <p>30 days from activation</p>
+            <Link href="/pilot/">Review the pilot <ArrowRight size={16} aria-hidden="true" /></Link>
+            <small>Payment is requested only after business qualification and scope confirmation.</small>
+          </div>
+        </section>
+
         <section className="comparison-band">
           <div className="section-heading wide">
             <div><p className="eyebrow">Popular planning routes</p><h2>Country comparisons</h2></div>
@@ -379,7 +402,11 @@ export function Planner() {
       </main>
 
       <footer id="data">
-        <div><strong>Borderless Business Days</strong><span>Planning estimates for Monday-Friday teams. Verify statutory and contractual deadlines with local counsel.</span></div>
+        <div>
+          <strong>Borderless Business Days</strong>
+          <span>Planning estimates for Monday-Friday teams. Verify statutory and contractual deadlines with local counsel.</span>
+          <span className="footer-links"><Link href="/pilot/">API Pilot</Link><Link href="/terms/">Terms</Link><Link href="/privacy/">Privacy</Link><Link href="/refund/">Refunds</Link></span>
+        </div>
         <div>Holiday data: <a href={dataset.attribution.url} target="_blank" rel="noreferrer">{dataset.attribution.name}</a> ({dataset.attribution.license}) · Updated {formatHumanDate(dataset.generatedAt.slice(0, 10))}</div>
       </footer>
     </>

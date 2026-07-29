@@ -832,6 +832,7 @@ main {
 }
 
 .method-band,
+.pilot-band,
 .comparison-band {
   padding: 50px 32px;
   border-top: 1px solid var(--line);
@@ -893,6 +894,96 @@ main {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.pilot-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 58px;
+  align-items: center;
+  background: #17211c;
+  color: #f5f8f4;
+}
+
+.pilot-copy h2 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 52px);
+}
+
+.pilot-copy > p:not(.eyebrow) {
+  max-width: 720px;
+  margin: 17px 0 0;
+  color: #bbc8c0;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.pilot-inclusions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  margin-top: 26px;
+}
+
+.pilot-inclusions span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #d8e2dc;
+  font-size: 12px;
+}
+
+.pilot-inclusions svg {
+  color: #79c69d;
+}
+
+.pilot-offer {
+  display: grid;
+  gap: 10px;
+  padding: 28px;
+  border: 1px solid #53655a;
+  border-radius: 8px;
+  background: #202d26;
+}
+
+.pilot-offer > span,
+.pilot-offer > small {
+  color: #aebdb4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.pilot-offer strong {
+  font-size: 50px;
+  line-height: 1;
+}
+
+.pilot-offer strong small {
+  color: #b8c7be;
+  font-size: 15px;
+}
+
+.pilot-offer p {
+  margin: 0 0 8px;
+  color: #d6e0da;
+  font-size: 12px;
+}
+
+.pilot-offer a {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-radius: 5px;
+  background: #e4f2e9;
+  color: #174f39;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.pilot-offer a:hover {
+  background: #ffffff;
 }
 
 .comparison-band {
@@ -958,6 +1049,312 @@ footer a {
   color: var(--blue);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 3px;
+}
+
+.sales-page,
+.legal-page {
+  min-height: 100vh;
+  padding: 36px max(32px, calc((100vw - 1180px) / 2)) 70px;
+}
+
+.sales-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  gap: 70px;
+  align-items: center;
+  padding: 76px 0 64px;
+}
+
+.sales-hero h1 {
+  max-width: 840px;
+  margin: 0;
+  font-size: clamp(42px, 6vw, 76px);
+  line-height: 1.01;
+}
+
+.sales-hero > div > p:not(.eyebrow) {
+  max-width: 720px;
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.sales-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 15px;
+  margin-top: 28px;
+}
+
+.sales-actions > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sales-primary {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 17px;
+  border-radius: 5px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 740;
+}
+
+.sales-primary:hover {
+  background: var(--green);
+}
+
+.offer-card {
+  padding: 29px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.offer-card > span {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.offer-card > strong {
+  display: block;
+  margin-top: 18px;
+  font-size: 55px;
+  line-height: 1;
+}
+
+.offer-card > strong small {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.offer-card > p {
+  margin: 9px 0 21px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.offer-card ul,
+.text-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.offer-card li {
+  display: grid;
+  min-height: 43px;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  color: #465249;
+  font-size: 11px;
+}
+
+.offer-card li svg {
+  color: var(--green);
+}
+
+.sales-section {
+  padding: 55px 0;
+  border-top: 1px solid var(--line-strong);
+}
+
+.sales-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 35px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.sales-steps > div {
+  display: grid;
+  min-height: 230px;
+  align-content: start;
+  padding: 25px;
+  border-right: 1px solid var(--line);
+}
+
+.sales-steps > div:first-child {
+  padding-left: 0;
+}
+
+.sales-steps > div:last-child {
+  border-right: 0;
+}
+
+.sales-steps span {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.sales-steps svg {
+  margin-top: 30px;
+  color: var(--green);
+}
+
+.sales-steps h3 {
+  margin: 13px 0 7px;
+  font-size: 17px;
+}
+
+.sales-steps p,
+.sales-grid article > p,
+.sales-faq article p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.sales-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.sales-grid article {
+  min-height: 340px;
+  padding: 55px 55px 55px 0;
+}
+
+.sales-grid article + article {
+  padding-left: 55px;
+  border-left: 1px solid var(--line-strong);
+}
+
+.sales-grid h2,
+.sales-faq h2,
+.sales-cta h2 {
+  margin: 0 0 20px;
+  font-size: clamp(25px, 3vw, 38px);
+}
+
+.text-list li {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+  color: #435047;
+  font-size: 12px;
+}
+
+.legal-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-top: 25px;
+}
+
+.legal-inline a,
+.legal-nav a {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sales-faq {
+  padding: 55px 0;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.sales-faq > div {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 45px;
+  border-top: 1px solid var(--line);
+}
+
+.sales-faq article {
+  padding: 23px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sales-faq h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.sales-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  padding: 60px 0 0;
+}
+
+.sales-cta h2 {
+  margin-bottom: 0;
+}
+
+.legal-page {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.legal-page header {
+  padding: 70px 0 38px;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.legal-page h1 {
+  margin: 0;
+  font-size: clamp(40px, 6vw, 66px);
+  line-height: 1;
+}
+
+.legal-page header > p:last-child {
+  max-width: 720px;
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.legal-copy section {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.35fr) minmax(0, 1fr);
+  gap: 40px;
+  padding: 28px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.legal-copy h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.legal-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.legal-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 17px;
+  padding-top: 28px;
 }
 
 .comparison-page {
@@ -1084,6 +1481,19 @@ footer a {
     grid-template-columns: 1fr;
   }
 
+  .pilot-band,
+  .sales-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .pilot-band {
+    gap: 35px;
+  }
+
+  .sales-hero {
+    gap: 40px;
+  }
+
   .controls-panel {
     border-right: 0;
     border-bottom: 1px solid var(--line);
@@ -1195,8 +1605,57 @@ footer a {
   }
 
   .method-band,
+  .pilot-band,
   .comparison-band {
     padding: 38px 16px;
+  }
+
+  .sales-page,
+  .legal-page {
+    padding: 26px 16px 50px;
+  }
+
+  .sales-hero {
+    padding: 50px 0 40px;
+  }
+
+  .sales-hero h1 {
+    font-size: 43px;
+  }
+
+  .sales-steps,
+  .sales-grid,
+  .sales-faq > div,
+  .legal-copy section {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-steps > div,
+  .sales-steps > div:first-child {
+    min-height: auto;
+    padding: 24px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .sales-grid article,
+  .sales-grid article + article {
+    min-height: auto;
+    padding: 38px 0;
+    border-left: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .sales-cta {
+    display: grid;
+  }
+
+  .legal-page header {
+    padding: 50px 0 30px;
+  }
+
+  .legal-copy section {
+    gap: 10px;
   }
 
   .method-grid > div,
