@@ -14,6 +14,7 @@ const isolatedEnvironment = {
   BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE: undefined,
   BBD_API_RATE_LIMIT_PER_MINUTE: undefined,
   BBD_API_MAX_BODY_BYTES: undefined,
+  BBD_API_TRUSTED_PROXY_ADDRESSES: undefined,
   XDG_DATA_HOME: undefined,
 };
 
@@ -37,6 +38,8 @@ test("validates private API configuration values", () => {
     assert.throws(() => loadConfig({ ...base, BBD_API_DB: "relative.sqlite3" }), /BBD_API_DB must be an absolute path/);
     assert.throws(() => loadConfig({ ...base, BBD_API_DATASET: "relative.json" }), /BBD_API_DATASET must be an absolute path/);
     assert.throws(() => loadConfig({ ...base, XDG_DATA_HOME: ".data" }), /XDG_DATA_HOME must be an absolute path/);
+    assert.deepEqual(loadConfig({ ...base, BBD_API_TRUSTED_PROXY_ADDRESSES: "127.0.0.1, ::1,127.0.0.1" }).trustedProxyAddresses, ["127.0.0.1", "::1"]);
+    assert.throws(() => loadConfig({ ...base, BBD_API_TRUSTED_PROXY_ADDRESSES: "127.0.0.1,not-an-ip" }), /only valid IP addresses/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

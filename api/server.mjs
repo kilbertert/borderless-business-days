@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -159,13 +160,26 @@ function createRateLimiter(limitPerMinute, { code, message }) {
   };
 }
 
-function requestSource(request) {
+function normalizedAddress(value) {
+  if (typeof value !== "string") return "unknown";
+  const trimmed = value.trim();
+  if (trimmed.startsWith("::ffff:") && isIP(trimmed.slice(7)) === 4) return trimmed.slice(7);
+  return trimmed || "unknown";
+}
+
+function requestSource(request, trustedProxyAddresses) {
+  const remoteAddress = normalizedAddress(request.socket.remoteAddress);
   const cloudflareAddress = request.headers["cf-connecting-ip"];
-  if (typeof cloudflareAddress === "string" && cloudflareAddress.trim()) return cloudflareAddress.trim();
-  return request.socket.remoteAddress ?? "unknown";
+  if (trustedProxyAddresses.has(remoteAddress)
+    && typeof cloudflareAddress === "string"
+    && isIP(cloudflareAddress.trim()) !== 0) {
+    return cloudflareAddress.trim();
+  }
+  return remoteAddress;
 }
 
 export function createApiServer({ config, dataset, store, logger = console }) {
+  const trustedProxyAddresses = new Set((config.trustedProxyAddresses ?? []).map(normalizedAddress));
   const preAuthRateLimit = createRateLimiter(config.preAuthRateLimitPerMinute ?? Math.max(120, config.rateLimitPerMinute * 4), {
     code: "request_rate_limit_exceeded",
     message: "Too many requests from this client. Try again shortly.",
@@ -202,7 +216,7 @@ export function createApiServer({ config, dataset, store, logger = console }) {
       const calculationRoute = request.method === "POST" && POST_ROUTES.has(pathname);
       if (!accountRoute && !calculationRoute) throw new RequestError("Route not found.", "not_found", 404);
 
-      preAuthRateLimit(requestSource(request));
+      preAuthRateLimit(requestSource(request, trustedProxyAddresses));
       const apiKey = apiKeyFromRequest(request);
       keyId = extractKeyId(apiKey);
       const verified = store.verify(apiKey);
@@ -211,6 +225,9 @@ export function createApiServer({ config, dataset, store, logger = console }) {
       if (accountRoute) {
         statusCode = 200;
         return jsonResponse(response, statusCode, { data: { customerName: verified.customer_name, customerRef: verified.customer_ref, key: keyMeta(verified) } }, requestId, quotaHeaders(verified));
+      }
+      if (verified.request_count >= verified.request_limit) {
+        throw new KeyAccessError("The API key request allowance is exhausted.", "quota_exhausted", 429);
       }
 
       const body = await readJson(request, config.maximumBodyBytes);
@@ -246,8 +263,8 @@ export function createApiServer({ config, dataset, store, logger = console }) {
         };
       }
 
-      const consumed = store.consume(apiKey, pathname);
       const data = calculate();
+      const consumed = store.consume(apiKey, pathname);
       statusCode = 200;
       return jsonResponse(response, statusCode, { data, meta: { requestId, key: keyMeta(consumed), dataset: datasetMeta(dataset) } }, requestId, quotaHeaders(consumed));
     } catch (error) {

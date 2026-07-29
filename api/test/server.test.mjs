@@ -45,6 +45,7 @@ async function withServer({ configOverrides = {}, requestLimit = 2 } = {}, callb
       preAuthRateLimitPerMinute: 100,
       rateLimitPerMinute: 100,
       maximumBodyBytes: 32_768,
+      trustedProxyAddresses: [],
       ...configOverrides,
     };
     const dataset = loadDataset(datasetPath);
@@ -64,7 +65,7 @@ async function withServer({ configOverrides = {}, requestLimit = 2 } = {}, callb
 }
 
 test("serves validated calculations and enforces quota semantics", async () => {
-  await withServer({}, async ({ baseUrl, config, issued, store }) => {
+  await withServer({ requestLimit: 3 }, async ({ baseUrl, config, issued, store }) => {
     const headers = { authorization: `Bearer ${issued.apiKey}`, "content-type": "application/json" };
 
     const health = await fetch(`${baseUrl}/healthz`);
@@ -116,13 +117,22 @@ test("serves validated calculations and enforces quota semantics", async () => {
     assert.equal((await invalidCountry.json()).error.code, "invalid_request");
     assert.equal(store.getKey(issued.record.id).request_count, 0);
 
+    const unresolvedDate = await fetch(`${baseUrl}/v1/business-days/add`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ countries: ["US"], start: "2026-12-31", amount: 1 }),
+    });
+    assert.equal(unresolvedDate.status, 400);
+    assert.equal((await unresolvedDate.json()).error.code, "invalid_request");
+    assert.equal(store.getKey(issued.record.id).request_count, 0);
+
     const analyze = await fetch(`${baseUrl}/v1/business-days/analyze`, {
       method: "POST",
       headers,
       body: JSON.stringify({ countries: ["US", "GB"], start: "2026-01-01", end: "2026-01-05" }),
     });
     assert.equal(analyze.status, 200);
-    assert.equal(analyze.headers.get("x-quota-remaining"), "1");
+    assert.equal(analyze.headers.get("x-quota-remaining"), "2");
     assert.equal((await analyze.json()).data.summary.sharedBusinessDays, 1);
 
     const account = await fetch(`${baseUrl}/v1/account`, { headers: { authorization: `Bearer ${issued.apiKey}` } });
@@ -135,7 +145,25 @@ test("serves validated calculations and enforces quota semantics", async () => {
       body: JSON.stringify({ countries: ["US"], start: "2026-01-01", amount: 1 }),
     });
     assert.equal(add.status, 200);
-    assert.equal(add.headers.get("x-quota-remaining"), "0");
+    assert.equal(add.headers.get("x-quota-remaining"), "1");
+    assert.equal((await add.json()).data.result, "2026-01-02");
+
+    const windows = await fetch(`${baseUrl}/v1/business-days/windows`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ countries: ["US", "GB"], start: "2026-01-01", horizonDays: 30, businessDays: 3 }),
+    });
+    assert.equal(windows.status, 200);
+    assert.equal(windows.headers.get("x-quota-remaining"), "0");
+    const windowsBody = await windows.json();
+    assert.equal(windowsBody.data.end, "2026-01-30");
+    assert.deepEqual(windowsBody.data.windows[0], {
+      start: "2026-01-05",
+      end: "2026-01-07",
+      businessDays: 3,
+      calendarDays: 3,
+    });
+    assert.equal(windowsBody.data.summary.sharedBusinessDays > 0, true);
 
     const exhausted = await fetch(`${baseUrl}/v1/business-days/windows`, {
       method: "POST",
@@ -154,12 +182,19 @@ test("serves validated calculations and enforces quota semantics", async () => {
 
 test("enforces separate pre-authentication and API key rate limits", async () => {
   await withServer({ configOverrides: { preAuthRateLimitPerMinute: 1 } }, async ({ baseUrl }) => {
-    const first = await fetch(`${baseUrl}/v1/account`);
+    const first = await fetch(`${baseUrl}/v1/account`, { headers: { "cf-connecting-ip": "198.51.100.10" } });
     assert.equal(first.status, 401);
-    const limited = await fetch(`${baseUrl}/v1/account`);
+    const limited = await fetch(`${baseUrl}/v1/account`, { headers: { "cf-connecting-ip": "198.51.100.11" } });
     assert.equal(limited.status, 429);
     assert.equal(limited.headers.get("retry-after"), "60");
     assert.equal((await limited.json()).error.code, "request_rate_limit_exceeded");
+  });
+
+  await withServer({ configOverrides: { preAuthRateLimitPerMinute: 1, trustedProxyAddresses: ["127.0.0.1"] } }, async ({ baseUrl }) => {
+    const first = await fetch(`${baseUrl}/v1/account`, { headers: { "cf-connecting-ip": "198.51.100.10" } });
+    assert.equal(first.status, 401);
+    const separateSource = await fetch(`${baseUrl}/v1/account`, { headers: { "cf-connecting-ip": "198.51.100.11" } });
+    assert.equal(separateSource.status, 401);
   });
 
   await withServer({ configOverrides: { rateLimitPerMinute: 1 } }, async ({ baseUrl, issued }) => {

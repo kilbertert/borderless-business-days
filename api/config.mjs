@@ -1,4 +1,5 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +33,7 @@ export function readEnvironmentFile(filePath) {
     throw new Error(`Environment file permissions must not exceed 0600: ${filePath}`);
   }
 
-  const descriptor = openSync(filePath, constants.O_RDONLY | NO_FOLLOW);
+  const descriptor = openSync(filePath, constants.O_RDONLY | constants.O_NONBLOCK | NO_FOLLOW);
   let contents;
   try {
     const descriptorMetadata = fstatSync(descriptor);
@@ -82,6 +83,17 @@ function parseAbsolutePath(value, fallback, name) {
   return path.normalize(candidate);
 }
 
+function parseTrustedProxyAddresses(value) {
+  if (value === undefined) return [];
+  if (typeof value !== "string") throw new Error("BBD_API_TRUSTED_PROXY_ADDRESSES must be a comma-separated list of IP addresses.");
+  if (!value.trim()) return [];
+  const addresses = value.split(",").map((address) => address.trim());
+  if (addresses.some((address) => !address || isIP(address) === 0)) {
+    throw new Error("BBD_API_TRUSTED_PROXY_ADDRESSES must contain only valid IP addresses.");
+  }
+  return [...new Set(addresses)];
+}
+
 export function loadConfig(overrides = {}) {
   const defaultEnvironmentFile = path.join(homedir(), ".config", "borderless-business-days-api", "config.env");
   const environmentFile = parseAbsolutePath(overrides.environmentFile ?? process.env.BBD_API_ENV_FILE, defaultEnvironmentFile, "BBD_API_ENV_FILE");
@@ -104,5 +116,6 @@ export function loadConfig(overrides = {}) {
     preAuthRateLimitPerMinute: parseInteger(values.BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE, 120, { minimum: 1, maximum: 100_000, name: "BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE" }),
     rateLimitPerMinute: parseInteger(values.BBD_API_RATE_LIMIT_PER_MINUTE, 60, { minimum: 1, maximum: 10_000, name: "BBD_API_RATE_LIMIT_PER_MINUTE" }),
     maximumBodyBytes: parseInteger(values.BBD_API_MAX_BODY_BYTES, 32_768, { minimum: 1_024, maximum: 1_048_576, name: "BBD_API_MAX_BODY_BYTES" }),
+    trustedProxyAddresses: parseTrustedProxyAddresses(values.BBD_API_TRUSTED_PROXY_ADDRESSES),
   };
 }

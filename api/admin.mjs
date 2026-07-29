@@ -77,6 +77,19 @@ function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function failedDeliveryError(store, issued, description, deliveryError, additionalFailures = []) {
+  const failures = [...additionalFailures];
+  try {
+    store.setStatus(issued.record.id, "revoked");
+  } catch (rollbackError) {
+    failures.push(`automatic revocation failed: ${errorMessage(rollbackError)}`);
+  }
+  const outcome = failures.length === 0
+    ? "The new API key was revoked."
+    : `Manual intervention is required for API key ${issued.record.id}: ${failures.join("; ")}.`;
+  return new Error(`${description}: ${errorMessage(deliveryError)}. ${outcome}`);
+}
+
 function writePrivateKeyFile(keyFile, apiKey) {
   let descriptor;
   let created = false;
@@ -131,6 +144,7 @@ export function runAdmin(arguments_, config, { createStore: createStore_ = creat
 
   const resolvedConfig = config ?? loadConfig();
   const store = createStore_(resolvedConfig);
+  let operationError;
   try {
     switch (command) {
       case "init":
@@ -149,20 +163,15 @@ export function runAdmin(arguments_, config, { createStore: createStore_ = creat
         if (keyFile) {
           const fileFailure = writePrivateKeyFile(keyFile, issued.apiKey);
           if (fileFailure) {
-            const failures = [...fileFailure.cleanupErrors];
-            try {
-              store.setStatus(issued.record.id, "revoked");
-            } catch (rollbackError) {
-              failures.push(`automatic revocation failed: ${errorMessage(rollbackError)}`);
-            }
-            const outcome = failures.length === 0
-              ? "The new API key was revoked and no plaintext key file remains."
-              : `Manual intervention is required for API key ${issued.record.id}: ${failures.join("; ")}.`;
-            throw new Error(`The key file could not be written: ${errorMessage(fileFailure.error)}. ${outcome}`);
+            throw failedDeliveryError(store, issued, "The key file could not be written", fileFailure.error, fileFailure.cleanupErrors);
           }
           print({ warning: "The plaintext API key was written once to the private key file.", keyFile, key: issued.record }, writeOutput);
         } else {
-          print({ warning: "This is the only time the plaintext API key will be displayed.", apiKey: issued.apiKey, key: issued.record }, writeOutput);
+          try {
+            print({ warning: "This is the only time the plaintext API key will be displayed.", apiKey: issued.apiKey, key: issued.record }, writeOutput);
+          } catch (outputError) {
+            throw failedDeliveryError(store, issued, "The plaintext API key could not be written to standard output", outputError);
+          }
         }
         break;
       }
@@ -186,8 +195,18 @@ export function runAdmin(arguments_, config, { createStore: createStore_ = creat
         print({ key: store.extend(required(options, "id"), integerOption(options, "days", undefined, { minimum: 1, maximum: 366 })) }, writeOutput);
         break;
     }
+  } catch (error) {
+    operationError = error;
+    throw error;
   } finally {
-    store.close();
+    try {
+      store.close();
+    } catch (closeError) {
+      if (operationError) {
+        throw new AggregateError([operationError, closeError], "The administration command failed and the API key store could not be closed.", { cause: operationError });
+      }
+      throw closeError;
+    }
   }
 }
 
