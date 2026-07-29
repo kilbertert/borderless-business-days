@@ -15,6 +15,8 @@ The localhost endpoint must not be advertised to customers. A customer-ready end
 
 The reserved customer hostname for that ingress is `https://api.borderlessbusinessdays.com`. Do not use a personal blog domain for this service.
 
+SQLite runs in rollback-journal mode so the long-lived systemd service and short-lived operator CLI share one committed database state across the service's private mount namespace. Do not enable WAL while that sandbox boundary remains in place.
+
 ## Authentication
 
 Use either header format:

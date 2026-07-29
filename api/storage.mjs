@@ -104,14 +104,14 @@ export class KeyStore {
       createPrivateDatabaseFile(databasePath);
       securePrivateFile(databasePath);
     }
-    securePrivateFile(`${databasePath}-wal`, { allowMissing: true });
-    securePrivateFile(`${databasePath}-shm`, { allowMissing: true });
+    securePrivateFile(`${databasePath}-journal`, { allowMissing: true });
 
     let database;
     try {
       database = new DatabaseSync(databasePath);
       this.database = database;
-      this.database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+      // WAL sidecars can split across the API service's private mount namespace and the operator CLI.
+      this.database.exec("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
       this.database.exec(`
       CREATE TABLE IF NOT EXISTS api_keys (
         id TEXT PRIMARY KEY,
@@ -182,7 +182,7 @@ export class KeyStore {
   }
 
   secureDatabaseFiles() {
-    for (const filePath of [this.databasePath, `${this.databasePath}-wal`, `${this.databasePath}-shm`]) {
+    for (const filePath of [this.databasePath, `${this.databasePath}-journal`]) {
       securePrivateFile(filePath, { allowMissing: filePath !== this.databasePath, repairPermissions: true });
     }
   }
