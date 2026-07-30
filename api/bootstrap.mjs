@@ -76,6 +76,8 @@ export function bootstrapRuntime({ homeDirectory = homedir() } = {}) {
   const contents = [
     "BBD_API_HOST=127.0.0.1",
     "BBD_API_PORT=4181",
+    "BBD_API_PUBLIC_BASE_URL=https://api.borderlessbusinessdays.com",
+    "BBD_API_TRUSTED_PROXY_ADDRESSES=127.0.0.1,::1",
     `BBD_API_DB=${databasePath}`,
     `BBD_API_DATASET=${datasetPath}`,
     `BBD_API_KEY_PEPPER=${randomBytes(48).toString("base64url")}`,

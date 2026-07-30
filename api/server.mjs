@@ -116,6 +116,12 @@ function normalizeInteger(value, name) {
   return value;
 }
 
+function apiBaseUrl(config) {
+  if (config.publicBaseUrl) return config.publicBaseUrl;
+  const host = isIP(config.host) === 6 ? `[${config.host}]` : config.host;
+  return `http://${host}:${config.port}`;
+}
+
 function openApiDocument(config) {
   return {
     openapi: "3.1.0",
@@ -124,7 +130,7 @@ function openApiDocument(config) {
       version: "1.0.0-pilot",
       description: "B2B pilot API for shared business-day calculations across public holiday calendars.",
     },
-    servers: [{ url: `http://${config.host}:${config.port}` }],
+    servers: [{ url: apiBaseUrl(config) }],
     components: {
       securitySchemes: {
         bearerApiKey: { type: "http", scheme: "bearer", bearerFormat: "BBD API Key" },

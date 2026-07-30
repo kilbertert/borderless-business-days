@@ -43,6 +43,8 @@ test("creates private runtime configuration once and preserves the existing secr
     const firstContents = readFileSync(first.environmentFile, "utf8");
     assert.equal(first.created, true);
     assert.match(firstContents, /BBD_API_KEY_PEPPER=[A-Za-z0-9_-]{32,}/);
+    assert.match(firstContents, /^BBD_API_PUBLIC_BASE_URL=https:\/\/api\.borderlessbusinessdays\.com$/m);
+    assert.match(firstContents, /^BBD_API_TRUSTED_PROXY_ADDRESSES=127\.0\.0\.1,::1$/m);
     assert.equal(process.umask(), previousUmask);
     if (process.platform !== "win32") {
       assert.equal(statSync(first.configurationDirectory).mode & 0o777, 0o700);

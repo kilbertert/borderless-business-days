@@ -83,6 +83,28 @@ function parseAbsolutePath(value, fallback, name) {
   return path.normalize(candidate);
 }
 
+function parsePublicBaseUrl(value) {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim() || value !== value.trim()) {
+    throw new Error("BBD_API_PUBLIC_BASE_URL must be an HTTPS origin without surrounding whitespace.");
+  }
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("BBD_API_PUBLIC_BASE_URL must be a valid HTTPS origin.");
+  }
+  if (url.protocol !== "https:"
+    || url.username
+    || url.password
+    || url.pathname !== "/"
+    || url.search
+    || url.hash) {
+    throw new Error("BBD_API_PUBLIC_BASE_URL must be an HTTPS origin without credentials, path, query, or fragment.");
+  }
+  return url.origin;
+}
+
 function parseTrustedProxyAddresses(value) {
   if (value === undefined) return [];
   if (typeof value !== "string") throw new Error("BBD_API_TRUSTED_PROXY_ADDRESSES must be a comma-separated list of IP addresses.");
@@ -113,6 +135,7 @@ export function loadConfig(overrides = {}) {
     databasePath: parseAbsolutePath(values.BBD_API_DB, path.join(dataHome, "borderless-business-days-api", "api.sqlite3"), "BBD_API_DB"),
     datasetPath: parseAbsolutePath(values.BBD_API_DATASET, path.join(projectRoot, "src", "data", "holidays.json"), "BBD_API_DATASET"),
     keyPepper,
+    publicBaseUrl: parsePublicBaseUrl(values.BBD_API_PUBLIC_BASE_URL),
     preAuthRateLimitPerMinute: parseInteger(values.BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE, 120, { minimum: 1, maximum: 100_000, name: "BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE" }),
     rateLimitPerMinute: parseInteger(values.BBD_API_RATE_LIMIT_PER_MINUTE, 60, { minimum: 1, maximum: 10_000, name: "BBD_API_RATE_LIMIT_PER_MINUTE" }),
     maximumBodyBytes: parseInteger(values.BBD_API_MAX_BODY_BYTES, 32_768, { minimum: 1_024, maximum: 1_048_576, name: "BBD_API_MAX_BODY_BYTES" }),
