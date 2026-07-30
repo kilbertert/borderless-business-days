@@ -101,8 +101,14 @@ export function Planner() {
       if (MODES.some((item) => item.id === requestedMode)) setMode(requestedMode as Mode);
       const requestedStart = params.get("start");
       const requestedEnd = params.get("end");
+      const requestedAmount = Number(params.get("amount"));
+      const requestedWindowLength = Number(params.get("windowLength"));
+      const requestedHorizon = Number(params.get("horizon"));
       if (requestedStart) setStart(clampToDataset(requestedStart));
       if (requestedEnd) setEnd(clampToDataset(requestedEnd));
+      if (Number.isInteger(requestedAmount) && requestedAmount >= -100 && requestedAmount <= 100 && requestedAmount !== 0) setAmount(requestedAmount);
+      if (Number.isInteger(requestedWindowLength) && requestedWindowLength >= 1 && requestedWindowLength <= 20) setWindowLength(requestedWindowLength);
+      if ([30, 60, 90, 180, 365].includes(requestedHorizon)) setHorizon(requestedHorizon);
     });
   }, []);
 
@@ -158,12 +164,18 @@ export function Planner() {
 
   const copyShareLink = async () => {
     const url = new URL(window.location.href);
-    url.search = new URLSearchParams({
+    const params = new URLSearchParams({
       countries: countryCodes.join(","),
       mode,
       start,
-      end,
-    }).toString();
+    });
+    if (mode === "range") params.set("end", end);
+    if (mode === "add") params.set("amount", String(amount));
+    if (mode === "window") {
+      params.set("windowLength", String(windowLength));
+      params.set("horizon", String(horizon));
+    }
+    url.search = params.toString();
     window.history.replaceState({}, "", url);
     await navigator.clipboard.writeText(url.toString());
     setCopied(true);
@@ -179,6 +191,7 @@ export function Planner() {
         </Link>
         <nav>
           <a href="#method">Method</a>
+          <a href="#guides">Guides</a>
           <a href="#data">Data</a>
           <Link className="nav-command" href="/pilot/">
             <Code2 size={16} aria-hidden="true" /> API pilot
@@ -399,13 +412,25 @@ export function Planner() {
             <Link href="/compare/au-nz/">Australia + NZ <ArrowRight size={16} /></Link>
           </div>
         </section>
+
+        <section className="guides-band" id="guides">
+          <div className="section-heading wide">
+            <div><p className="eyebrow">Action-oriented calendar guidance</p><h2>Planning guides</h2></div>
+            <p>Start with the commercial or operational decision, then open the calculator with a relevant market pair and method.</p>
+          </div>
+          <div className="guide-links">
+            <Link href="/guides/international-payment-due-date-calculator/"><span>International payment due-date calculator</span><ArrowRight size={16} aria-hidden="true" /></Link>
+            <Link href="/guides/calculate-deadline-across-two-countries/"><span>Calculate a deadline across two countries</span><ArrowRight size={16} aria-hidden="true" /></Link>
+            <Link href="/guides/cross-border-delivery-date-calculator/"><span>Cross-border delivery date calculator</span><ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+        </section>
       </main>
 
       <footer id="data">
         <div>
           <strong>Borderless Business Days</strong>
           <span>Planning estimates for Monday-Friday teams. Verify statutory and contractual deadlines with local counsel.</span>
-          <span className="footer-links"><Link href="/pilot/">API Pilot</Link><Link href="/terms/">Terms</Link><Link href="/privacy/">Privacy</Link><Link href="/refund/">Refunds</Link></span>
+          <span className="footer-links"><Link href="/guides/international-payment-due-date-calculator/">Guides</Link><Link href="/pilot/">API Pilot</Link><Link href="/terms/">Terms</Link><Link href="/privacy/">Privacy</Link><Link href="/refund/">Refunds</Link></span>
         </div>
         <div>Holiday data: <a href={dataset.attribution.url} target="_blank" rel="noreferrer">{dataset.attribution.name}</a> ({dataset.attribution.license}) · Updated {formatHumanDate(dataset.generatedAt.slice(0, 10))}</div>
       </footer>

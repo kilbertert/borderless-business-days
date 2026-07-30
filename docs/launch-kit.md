@@ -6,17 +6,30 @@
 
 **Tagline:** Find working days that every country on your team shares.
 
-**Description:** Count shared business days, add working days, and find clean launch windows across public holiday calendars in 206 markets. Share the calculation or export conflicts as CSV and ICS.
+**Description:** Count shared business days, add working days, and find clean launch windows across public holiday calendars in 206 markets. The free calculator runs in the browser, while a manually approved API pilot is available for B2B workflows.
 
 **First comment:**
 
-> International deadlines often look valid until one market is closed. I built Borderless Business Days to treat multiple jurisdictions as a single operating calendar. The first release is free, runs entirely in the browser, and does not send planning data to an API. I am looking for feedback from distributed teams and developers who need a business-day API.
+> International deadlines often look valid until one market is closed. I built Borderless Business Days to treat multiple jurisdictions as a single operating calendar. The free calculator runs entirely in the browser and does not send planning data to an API. For professional teams that need the same calculations inside their own workflow, the live Founding API Pilot provides 30 days and up to 1,000 requests after manual B2B qualification. I am looking for feedback from distributed teams, finance and legal operations, and developers working with cross-border deadlines.
+
+**Primary URL:** `https://borderlessbusinessdays.com`
+
+**Launch call to action:** Try a real cross-border calculation, then review the Founding API Pilot if the workflow needs automation.
+
+### Product Hunt readiness checklist
+
+- Product thumbnail and logo prepared for the current brand.
+- Four or five screenshots covering range count, add days, clean windows, export, and API Pilot.
+- A 30-60 second screen recording with a real international deadline scenario.
+- Maker profile, first comment, launch-day replies, and support coverage prepared.
+- Search Console and privacy-friendly conversion measurement verified before launch day.
+- No paid, coordinated, or artificial voting.
 
 ## Directory submission copy
 
-**Short:** Free cross-border business-day calculator for international teams.
+**Short:** Free cross-border business-day calculator with an optional B2B API pilot.
 
-**Long:** Borderless Business Days combines public holiday calendars for up to eight markets. It counts shared working days, calculates future deadlines, finds conflict-free windows, and exports CSV or ICS files.
+**Long:** Borderless Business Days combines public holiday calendars for up to eight markets. It counts shared working days, calculates future deadlines, finds conflict-free windows, and exports CSV or ICS files. The free calculator runs in the browser; a manually approved USD 50 Founding API Pilot provides 30 days and up to 1,000 requests for qualified business workflows.
 
 **Suggested categories:** Productivity, Remote Work, Finance Tools, Legal Operations, Developer Tools.
 
@@ -30,24 +43,38 @@ Published comparison pages:
 - United Kingdom and Germany shared business days.
 - Australia and New Zealand shared business days.
 
-Next pages should target actions rather than generic holiday lists:
+Published action-intent guides:
 
-- How to calculate a deadline across two countries.
-- Best product launch dates for US and European teams.
 - International payment due-date calculator.
-- Business days between the US and China.
+- How to calculate a deadline across two countries.
+- Cross-border delivery date calculator.
+
+Next pages should continue targeting decisions rather than generic holiday lists:
+
+- Best product launch dates for US and European teams.
 - How public holidays affect cross-border delivery estimates.
+- Business days for international invoice approval workflows.
+- Filing deadline calculator for distributed legal teams.
 
-## Monetization gates
+## Current monetization
 
-Do not build billing before there is evidence of recurring use.
+The Founding API Pilot is live as a manually approved B2B offer:
 
-1. Collect at least 10 qualified API requests through the public issue template.
-2. Interview at least 5 users about required markets, audit fields, and volume.
-3. Offer an API beta at USD 9/month for low-volume usage.
-4. Add USD 19/month team alerts only after users request recurring notifications.
+- USD 50 one-time payment.
+- 30 days from activation.
+- Up to 1,000 API requests.
+- No automatic renewal.
+- Payment link sent privately only after qualification and scope confirmation.
 
-Payment processing requires a user-owned Stripe, Lemon Squeezy, or Paddle account and identity verification. No credentials belong in the repository.
+Do not build recurring billing until recurring use, renewal intent, and support requirements are evidenced. Continue collecting qualified applications and interviewing users about markets, audit fields, volume, and integration needs.
+
+## Submission order
+
+1. Confirm Search Console, Bing Webmaster Tools, sitemap ingestion, and conversion measurement.
+2. Publish and internally link the first action-intent guide cluster.
+3. Submit to a small set of relevant, editorially reviewed directories and record acceptance, referral traffic, and copy variants.
+4. Share useful calculations in relevant professional communities without mass-posting.
+5. Launch on Product Hunt after screenshots, demo, replies, and measurement are ready.
 
 ## Weekly metrics
 
@@ -57,3 +84,5 @@ Payment processing requires a user-owned Stripe, Lemon Squeezy, or Paddle accoun
 - API access requests.
 - Markets selected most often.
 - Search queries that produce impressions but low click-through.
+- Directory submissions, acceptance status, and referral visits.
+- Product Hunt visits, calculator completions, and qualified Pilot applications.
