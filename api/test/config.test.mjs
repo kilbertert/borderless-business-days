@@ -11,6 +11,7 @@ const isolatedEnvironment = {
   BBD_API_DB: undefined,
   BBD_API_DATASET: undefined,
   BBD_API_KEY_PEPPER: undefined,
+  BBD_API_PUBLIC_BASE_URL: undefined,
   BBD_API_PREAUTH_RATE_LIMIT_PER_MINUTE: undefined,
   BBD_API_RATE_LIMIT_PER_MINUTE: undefined,
   BBD_API_MAX_BODY_BYTES: undefined,
@@ -29,7 +30,19 @@ test("validates private API configuration values", () => {
   try {
     const config = loadConfig(base);
     assert.equal(config.host, "127.0.0.1");
+    assert.equal(config.publicBaseUrl, undefined);
     assert.equal(config.preAuthRateLimitPerMinute, 120);
+    assert.equal(loadConfig({ ...base, BBD_API_PUBLIC_BASE_URL: "https://api.borderlessbusinessdays.com/" }).publicBaseUrl, "https://api.borderlessbusinessdays.com");
+    for (const value of [
+      "http://api.borderlessbusinessdays.com",
+      "https://api.borderlessbusinessdays.com/v1",
+      "https://user:password@api.borderlessbusinessdays.com",
+      "https://api.borderlessbusinessdays.com?source=test",
+      "not-a-url",
+      " https://api.borderlessbusinessdays.com",
+    ]) {
+      assert.throws(() => loadConfig({ ...base, BBD_API_PUBLIC_BASE_URL: value }), /BBD_API_PUBLIC_BASE_URL must be/);
+    }
     assert.throws(() => loadConfig({ ...base, BBD_API_KEY_PEPPER: 123 }), /at least 32 characters/);
     assert.throws(() => loadConfig({ ...base, BBD_API_HOST: " " }), /BBD_API_HOST must be a non-empty string/);
     assert.throws(() => loadConfig({ ...base, BBD_API_DB: "" }), /BBD_API_DB must be a non-empty string/);

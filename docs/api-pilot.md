@@ -4,16 +4,18 @@ The pilot API is a Node.js 24 service that uses the same generated holiday datas
 
 ## Runtime
 
-- Local endpoint: `http://127.0.0.1:4181`
-- Health: `GET /healthz`
-- OpenAPI document: `GET /openapi.json`
+- Public endpoint: `https://api.borderlessbusinessdays.com`
+- Public health: `https://api.borderlessbusinessdays.com/healthz`
+- Public OpenAPI document: `https://api.borderlessbusinessdays.com/openapi.json`
+- Loopback origin: `http://127.0.0.1:4181`
 - Database: `/home/claude/.local/share/borderless-business-days-api/api.sqlite3`
 - Private configuration: `/home/claude/.config/borderless-business-days-api/config.env`
-- User service: `borderless-business-days-api.service`
+- API user service: `borderless-business-days-api.service`
+- Tunnel user service: `borderless-business-days-api-tunnel.service`
 
-The localhost endpoint must not be advertised to customers. A customer-ready endpoint requires an explicitly approved HTTPS reverse-proxy or tunnel change.
+Customers must use the public HTTPS endpoint. The Node service remains bound to loopback and is published only through the dedicated Cloudflare Tunnel for `api.borderlessbusinessdays.com`. The public base URL is configured with `BBD_API_PUBLIC_BASE_URL`; Tunnel traffic is trusted only from the configured loopback proxy addresses.
 
-The reserved customer hostname for that ingress is `https://api.borderlessbusinessdays.com`. Do not use a personal blog domain for this service.
+Do not advertise the loopback origin or use a personal blog domain for this service. HTTP administration remains unavailable; API key lifecycle operations stay local to the operator CLI.
 
 SQLite runs in rollback-journal mode so the long-lived systemd service and short-lived operator CLI share one committed database state across the service's private mount namespace. Do not enable WAL while that sandbox boundary remains in place.
 

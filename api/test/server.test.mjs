@@ -180,6 +180,14 @@ test("serves validated calculations and enforces quota semantics", async () => {
   });
 });
 
+test("publishes the configured HTTPS origin in the OpenAPI document", async () => {
+  await withServer({ configOverrides: { publicBaseUrl: "https://api.borderlessbusinessdays.com" } }, async ({ baseUrl }) => {
+    const response = await fetch(`${baseUrl}/openapi.json`);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).servers, [{ url: "https://api.borderlessbusinessdays.com" }]);
+  });
+});
+
 test("enforces separate pre-authentication and API key rate limits", async () => {
   await withServer({ configOverrides: { preAuthRateLimitPerMinute: 1 } }, async ({ baseUrl }) => {
     const first = await fetch(`${baseUrl}/v1/account`, { headers: { "cf-connecting-ip": "198.51.100.10" } });
