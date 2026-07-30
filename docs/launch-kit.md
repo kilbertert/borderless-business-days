@@ -33,6 +33,8 @@
 
 **Suggested categories:** Productivity, Remote Work, Finance Tools, Legal Operations, Developer Tools.
 
+Prepared directory decisions, Product Hunt fields, gallery images, and the private-tracking policy are maintained in [`launch-distribution.md`](launch-distribution.md).
+
 ## Initial SEO cluster
 
 Published comparison pages:

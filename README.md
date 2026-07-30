@@ -48,7 +48,7 @@ Calculations assume a Monday-Friday workweek. They are planning estimates, not l
 
 Application code is MIT licensed.
 
-Product positioning and launch material are documented in [`docs/market-research.md`](docs/market-research.md) and [`docs/launch-kit.md`](docs/launch-kit.md). Search ownership, sitemap submission, indexing notifications, and privacy-friendly measurement are documented in [`docs/search-growth-ops.md`](docs/search-growth-ops.md).
+Product positioning and launch material are documented in [`docs/market-research.md`](docs/market-research.md), [`docs/launch-kit.md`](docs/launch-kit.md), and [`docs/launch-distribution.md`](docs/launch-distribution.md). Search ownership, sitemap submission, indexing notifications, and privacy-friendly measurement are documented in [`docs/search-growth-ops.md`](docs/search-growth-ops.md).
 
 ## Commercial path
 
