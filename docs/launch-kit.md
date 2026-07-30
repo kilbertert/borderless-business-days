@@ -76,13 +76,16 @@ Do not build recurring billing until recurring use, renewal intent, and support 
 4. Share useful calculations in relevant professional communities without mass-posting.
 5. Launch on Product Hunt after screenshots, demo, replies, and measurement are ready.
 
+The account setup, verification, rollback, and weekly reporting procedure is maintained in [`search-growth-ops.md`](search-growth-ops.md).
+
 ## Weekly metrics
 
-- Organic visits by comparison page.
-- Calculator completion rate.
-- Share, CSV, and ICS export events.
-- API access requests.
-- Markets selected most often.
-- Search queries that produce impressions but low click-through.
+- Google and Bing impressions, clicks, click-through rate, and average position by landing page.
+- Aggregate page views and referrers for comparison pages, guides, and `/pilot/`.
+- Core Web Vitals and page-load regressions reported by Cloudflare Web Analytics.
+- Directional Pilot interest: `/pilot/` page views divided by guide and calculator landing-page views.
+- Qualified API applications, approved pilots, cleared payments, and activated API keys from the existing private operational records.
 - Directory submissions, acceptance status, and referral visits.
-- Product Hunt visits, calculator completions, and qualified Pilot applications.
+- Product Hunt visits, Pilot page visits, and qualified applications.
+
+Phase 1 measurement deliberately excludes calculator inputs, selected markets, dates, shared-link query strings, API keys, and payment details. Calculator completion, share, CSV, and ICS events remain uninstrumented until their product value justifies a separate privacy review.
